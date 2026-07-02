@@ -41,9 +41,10 @@ data-op/
  registered: postgres (default) **and** mysql (both in `bootstrap/providers.go`).
  Embedded Starlark via `go.starlark.net` (stage sanitize scripts).
 - **UI:** React 19, Vite 8, TypeScript 6, react-router-dom v7, @tanstack/react-query v5,
-  axios. Package manager is **pnpm** (`pnpm-lock.yaml`). Styling: **Tailwind CSS v4**
-  (`@tailwindcss/vite`) + **shadcn/ui** (Radix primitives, new-york style) in
-  `src/components/ui/`; `lucide-react` icons; `cn()` in `src/lib/utils.ts`. The legacy
+ axios. Package manager is **pnpm** (`pnpm-lock.yaml`). Styling: **Tailwind CSS v4**
+ (`@tailwindcss/vite`) + **shadcn/ui** (Radix primitives, new-york style) in
+ `src/components/ui/`; drag-and-drop via `@atlaskit/pragmatic-drag-and-drop` + hitbox.
+ `lucide-react` icons; `cn()` in `src/lib/utils.ts`. The legacy
   plain-CSS design system still lives in `src/index.css` and older pages/components use
   it — shadcn tokens are mapped onto the same brand palette (see the `@theme inline`
   block + `:root`), so the two coexist. Path alias `@/*` → `src/*` (vite + tsconfig).
@@ -133,7 +134,8 @@ a unique `email` at Intake).
   happens via the `fb_*` sanitize-script builtins instead). `required`, `is_unique`, `max_count` (0 = unlimited repeatable entries; select forced
   to 1), `options` (JSON array string, choice types only), `prev_stage_key` (key of a
   field in the immediately-previous stage whose value seeds this field), `default_value`
-  (optional pre-fill for new entries at this stage), `position`. Stages list API also
+  (optional pre-fill for new entries at this stage), `position` (0-based order within the
+  stage; new fields append at the end; reorder via the fields/reorder API). Stages list API also
   annotates each field with `value_count` (stored record values) for safe editing in the UI.
   Field updates reject changes that would orphan data: type/key/inheritance locked when
   `value_count > 0`; `max_count` cannot drop below peak per-record usage; choice options
@@ -205,7 +207,8 @@ members: `GET/POST …/members`, `PUT/DELETE …/members/{member}` ·
 stages: `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` (create/update accept
 `sanitize_entry` — Starlark script defining `sanitize(data)`, compile-validated, empty
 string clears it) ·
-fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` ·
+fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]`, `PUT …/fields/reorder` (body
+`{ field_ids: number[] }` — full ordered id list; reassigns positions 0..n-1) ·
 constraints: `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` ·
 records: `GET/POST …/records`, `POST …/records/bulk` (bulk import; first stage must
 have ≥1 field; body `{values:[…]}` — one value per line when the stage has one field,
@@ -236,14 +239,16 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   Login, Campaigns, CampaignDetail (layout + route segment components), RecordDetail
   (dynamic form + flow actions; inherited `prev_stage_key` fields render disabled).
   `components/`: `CampaignNav`, `UserMenu`, StageBuilder — pipeline-style stage builder (`components/stage-builder/`): horizontal **stage tabs**
-  (numbered pills with field counts) + **Add stage** button on the right; selected stage shows a card
-  editor with field list (badges for rules, inline edit/delete), **Add field** panel
+  (numbered pills with field counts) + **Add stage** button on the right;   selected stage shows a card
+  editor with field list (badges for rules, inline edit/delete, **drag-handle reorder** via
+  `@atlaskit/pragmatic-drag-and-drop` + hitbox closest-edge), **Add field** panel
   (default value, allow-multiple checkbox with max-count only when checked, inherit-from-prev
   copies label+type read-only and other options editable), composite-unique + collapsible
   **Sanitize entry (Starlark)** — CodeMirror editor (`StarlarkEditor`) with Python syntax
   highlighting, autocomplete for builtins/snippets, and live error lint via a Go WASM
   module (`api/wasm/sanitize` → `ui/public/wasm/sanitize.wasm`, built by
   `scripts/build-sanitize-wasm.sh`; runs the same `starlark.Validate` as the API) plus guide dialog. Backend 409s when edits would lose data.
+  Field order: `sortStageFields()` in `src/lib/stageFields.ts` (UI); `services.SortStageFields` + `StageFields()` order by `position ASC` (API).
   Members, Settings, AnalyticsPanel, `DynamicForm` (form engine; applies `default_value`
   when empty), and `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style

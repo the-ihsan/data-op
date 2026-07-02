@@ -51,6 +51,7 @@ func Api() {
 
 		// Stage fields
 		router.Post("campaigns/{campaign}/stages/{stage}/fields", fields.Store)
+		router.Put("campaigns/{campaign}/stages/{stage}/fields/reorder", fields.Reorder)
 		router.Put("campaigns/{campaign}/stages/{stage}/fields/{field}", fields.Update)
 		router.Delete("campaigns/{campaign}/stages/{stage}/fields/{field}", fields.Destroy)
 

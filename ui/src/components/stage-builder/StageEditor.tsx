@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { constraintApi, fieldApi } from '@/api/resources'
 import type { Stage } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { sortStageFields } from '@/lib/stageFields'
 import CompositeConstraintBadges from './CompositeConstraintBadges'
 import ConstraintSection from './ConstraintSection'
-import FieldCard from './FieldCard'
+import DraggableFieldList from './DraggableFieldList'
 import FieldEditor from './FieldEditor'
 import SanitizeSection from './SanitizeSection'
 import { emptyFormState, fieldToFormState } from './field-form'
@@ -28,10 +29,24 @@ export default function StageEditor({
   onChange: () => void
   onDelete: () => void
 }) {
-  const fields = [...(stage.fields ?? [])].sort((a, b) => a.position - b.position)
+  const serverFields = sortStageFields(stage.fields)
+  const [orderedFieldIds, setOrderedFieldIds] = useState<number[]>(() => serverFields.map((f) => f.id))
   const constraints = stage.unique_constraints ?? []
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null)
   const [addingField, setAddingField] = useState(false)
+
+  useEffect(() => {
+    setOrderedFieldIds(serverFields.map((f) => f.id))
+  }, [stage.id, serverFields.map((f) => `${f.id}:${f.position}`).join(',')])
+
+  const fieldsById = new Map(serverFields.map((f) => [f.id, f]))
+  const fields = orderedFieldIds.map((id) => fieldsById.get(id)).filter((f) => f != null)
+
+  const dragDisabled =
+    isRefetching ||
+    isDeletingStage ||
+    editingFieldId != null ||
+    addingField
 
   const removeField = useMutation({
     mutationFn: (fieldId: number) => fieldApi.remove(campaignId, stage.id, fieldId),
@@ -40,6 +55,23 @@ export default function StageEditor({
       onChange()
     },
   })
+
+  const reorderFields = useMutation({
+    mutationFn: (fieldIds: number[]) => fieldApi.reorder(campaignId, stage.id, fieldIds),
+    onSuccess: onChange,
+    onError: () => {
+      setOrderedFieldIds(serverFields.map((f) => f.id))
+      onChange()
+    },
+  })
+
+  const handleReorder = useCallback(
+    (fieldIds: number[]) => {
+      setOrderedFieldIds(fieldIds)
+      reorderFields.mutate(fieldIds)
+    },
+    [reorderFields],
+  )
 
   const removeConstraint = useMutation({
     mutationFn: (cid: number) => constraintApi.remove(campaignId, stage.id, cid),
@@ -85,7 +117,7 @@ export default function StageEditor({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={isRefetching || isDeletingStage}
+                disabled={isRefetching || isDeletingStage || reorderFields.isPending}
                 onClick={() => setAddingField(true)}
               >
                 <Plus />
@@ -100,11 +132,14 @@ export default function StageEditor({
             </div>
           )}
 
-          <div className="space-y-2">
-            {fields.map((field) =>
-              editingFieldId === field.id ? (
+          {fields.length > 0 && (
+            <DraggableFieldList
+              fields={fields}
+              disabled={dragDisabled || removeField.isPending || reorderFields.isPending}
+              deletingFieldId={removeField.isPending ? removeField.variables : null}
+              editingFieldId={editingFieldId}
+              renderEditor={(field) => (
                 <FieldEditor
-                  key={field.id}
                   campaignId={campaignId}
                   stage={stage}
                   prevStage={prevStage}
@@ -116,23 +151,17 @@ export default function StageEditor({
                     onChange()
                   }}
                 />
-              ) : (
-                <FieldCard
-                  key={field.id}
-                  field={field}
-                  isDeleting={removeField.isPending && removeField.variables === field.id}
-                  disabled={isRefetching || removeField.isPending}
-                  onEdit={() => {
-                    setAddingField(false)
-                    setEditingFieldId(field.id)
-                  }}
-                  onDelete={() => {
-                    if (confirm(`Delete field "${field.label}"?`)) removeField.mutate(field.id)
-                  }}
-                />
-              ),
-            )}
-          </div>
+              )}
+              onReorder={handleReorder}
+              onEdit={(fieldId) => {
+                setAddingField(false)
+                setEditingFieldId(fieldId)
+              }}
+              onDelete={(field) => {
+                if (confirm(`Delete field "${field.label}"?`)) removeField.mutate(field.id)
+              }}
+            />
+          )}
 
           {addingField && (
             <FieldEditor
@@ -146,6 +175,10 @@ export default function StageEditor({
                 onChange()
               }}
             />
+          )}
+
+          {reorderFields.error && (
+            <p className="text-sm text-destructive">{(reorderFields.error as Error).message}</p>
           )}
         </section>
 

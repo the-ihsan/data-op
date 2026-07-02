@@ -1,4 +1,5 @@
 import { GripVertical, Loader2, Pencil, Trash2 } from 'lucide-react'
+import type { RefObject } from 'react'
 import { parseOptions, type StageField } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -7,12 +8,14 @@ import { FIELD_TYPE_LABELS } from './constants'
 
 export default function FieldCard({
   field,
+  dragHandleRef,
   isDeleting,
   disabled,
   onEdit,
   onDelete,
 }: {
   field: StageField
+  dragHandleRef?: RefObject<HTMLButtonElement | null>
   isDeleting?: boolean
   disabled?: boolean
   onEdit: () => void
@@ -29,7 +32,15 @@ export default function FieldCard({
         isDeleting && 'opacity-60',
       )}
     >
-      <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground/40" aria-hidden />
+      <button
+        ref={dragHandleRef}
+        type="button"
+        className="mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={`Drag to reorder ${field.label}`}
+        disabled={disabled || isDeleting}
+      >
+        <GripVertical className="size-4" aria-hidden />
+      </button>
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-foreground">{field.label}</span>

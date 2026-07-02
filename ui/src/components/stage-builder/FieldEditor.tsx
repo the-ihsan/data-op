@@ -5,6 +5,7 @@ import { fieldApi } from '@/api/resources'
 import type { FieldType, Stage, StageField } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { sortStageFields } from '@/lib/stageFields'
 import {
   Select,
   SelectContent,
@@ -40,7 +41,7 @@ export default function FieldEditor({
   const isChoice = state.type === 'select' || state.type === 'multiselect'
   const lockIdentity = inherited || hasData
 
-  const prevFields = prevStage?.fields ?? []
+  const prevFields = sortStageFields(prevStage?.fields)
 
   const save = useMutation({
     mutationFn: () => {

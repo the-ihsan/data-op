@@ -81,6 +81,10 @@ export const fieldApi = {
     unwrap<StageField>(api.put(`/campaigns/${campaignId}/stages/${stageId}/fields/${fieldId}`, body)),
   remove: (campaignId: number, stageId: number, fieldId: number) =>
     api.delete(`/campaigns/${campaignId}/stages/${stageId}/fields/${fieldId}`),
+  reorder: (campaignId: number, stageId: number, fieldIds: number[]) =>
+    unwrap<{ message: string }>(
+      api.put(`/campaigns/${campaignId}/stages/${stageId}/fields/reorder`, { field_ids: fieldIds }),
+    ),
 }
 
 // --- Composite unique constraints ---

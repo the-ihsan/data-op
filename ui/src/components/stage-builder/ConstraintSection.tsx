@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { constraintApi } from '@/api/resources'
 import type { Stage } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { sortStageFields } from '@/lib/stageFields'
 
 export default function ConstraintSection({
   campaignId,
@@ -15,7 +16,7 @@ export default function ConstraintSection({
   onChange: () => void
 }) {
   const [selected, setSelected] = useState<string[]>([])
-  const fields = stage.fields ?? []
+  const fields = sortStageFields(stage.fields)
 
   const add = useMutation({
     mutationFn: () => constraintApi.create(campaignId, stage.id, selected),

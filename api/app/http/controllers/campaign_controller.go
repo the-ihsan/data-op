@@ -117,6 +117,9 @@ func (r *CampaignController) Show(ctx http.Context) http.Response {
 		Get(&campaign.Stages); err != nil {
 		return serverError(ctx, err)
 	}
+	for i := range campaign.Stages {
+		services.SortStageFields(campaign.Stages[i].Fields)
+	}
 	return ok(ctx, campaign)
 }
 

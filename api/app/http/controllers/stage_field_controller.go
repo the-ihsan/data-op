@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/goravel/framework/contracts/http"
+	"github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/facades"
 
 	"goravel/app/models"
@@ -91,6 +92,72 @@ func (r *StageFieldController) Update(ctx http.Context) http.Response {
 		return serverError(ctx, err)
 	}
 	return ok(ctx, updated)
+}
+
+type reorderFieldsRequest struct {
+	FieldIDs []uint `json:"field_ids"`
+}
+
+func (r *StageFieldController) Reorder(ctx http.Context) http.Response {
+	stage, campaign, resp := loadStage(ctx)
+	if resp != nil {
+		return resp
+	}
+	if !services.CanManage(currentUserID(ctx), campaign.ID) {
+		return forbidden(ctx, "only owners or managers can reorder fields")
+	}
+
+	var req reorderFieldsRequest
+	if err := ctx.Request().Bind(&req); err != nil {
+		return badRequest(ctx, "invalid request body")
+	}
+	if len(req.FieldIDs) == 0 {
+		return badRequest(ctx, "field_ids is required")
+	}
+
+	var existing []models.StageField
+	if err := facades.Orm().Query().Where("stage_id", stage.ID).Get(&existing); err != nil {
+		return serverError(ctx, err)
+	}
+	if len(req.FieldIDs) != len(existing) {
+		return badRequest(ctx, "field_ids must include every field in the stage")
+	}
+
+	existingIDs := make(map[uint]struct{}, len(existing))
+	for _, f := range existing {
+		existingIDs[f.ID] = struct{}{}
+	}
+	seen := make(map[uint]struct{}, len(req.FieldIDs))
+	for _, id := range req.FieldIDs {
+		if _, ok := existingIDs[id]; !ok {
+			return badRequest(ctx, "unknown field id")
+		}
+		if _, dup := seen[id]; dup {
+			return badRequest(ctx, "duplicate field id")
+		}
+		seen[id] = struct{}{}
+	}
+
+	txErr := facades.Orm().Transaction(func(tx orm.Query) error {
+		for i, id := range req.FieldIDs {
+			var field models.StageField
+			if err := tx.Where("id", id).Where("stage_id", stage.ID).First(&field); err != nil {
+				return err
+			}
+			if field.ID == 0 {
+				return fmt.Errorf("field %d not found", id)
+			}
+			field.Position = i
+			if err := tx.Save(&field); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if txErr != nil {
+		return serverError(ctx, txErr)
+	}
+	return ok(ctx, http.Json{"message": "fields reordered"})
 }
 
 func (r *StageFieldController) Destroy(ctx http.Context) http.Response {
@@ -184,6 +251,15 @@ func (r *StageFieldController) buildField(ctx http.Context, stage *models.Stage,
 	field := existing
 	if field == nil {
 		field = &models.StageField{StageID: stage.ID}
+		if req.Position != nil {
+			field.Position = *req.Position
+		} else {
+			count, err := facades.Orm().Query().Model(&models.StageField{}).Where("stage_id", stage.ID).Count()
+			if err != nil {
+				return nil, serverError(ctx, err)
+			}
+			field.Position = int(count)
+		}
 	}
 	field.Key = key
 	field.Label = label
@@ -194,7 +270,7 @@ func (r *StageFieldController) buildField(ctx http.Context, stage *models.Stage,
 	field.Options = optionsJSON
 	field.PrevStageKey = prevKey
 	field.DefaultValue = defaultValue
-	if req.Position != nil {
+	if req.Position != nil && existing != nil {
 		field.Position = *req.Position
 	}
 	return field, nil

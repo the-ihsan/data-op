@@ -1,4 +1,5 @@
 import { parseOptions, defaultValuesForFields, type StageField } from '../api/types'
+import { sortStageFields } from '@/lib/stageFields'
 
 export type FormValues = Record<string, string[]>
 
@@ -18,6 +19,8 @@ export default function DynamicForm({
   onChange: (values: FormValues) => void
   disabled?: boolean
 }) {
+  const orderedFields = sortStageFields(fields)
+
   const setEntry = (key: string, index: number, value: string) => {
     const entries = [...(values[key] ?? [])]
     entries[index] = value
@@ -43,7 +46,7 @@ export default function DynamicForm({
 
   return (
     <div>
-      {fields.map((field) => {
+      {orderedFields.map((field) => {
         const defaults = defaultValuesForFields([field])[field.key]
         const rawEntries = values[field.key]
         const entries =

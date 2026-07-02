@@ -68,6 +68,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { sortStageFields } from '@/lib/stageFields'
 
 type CellValues = Record<string, string[]>
 
@@ -280,10 +281,7 @@ function StageGrid({
   // Keep the toolbar badge in sync with the live total.
   useEffect(() => { onTotalChange(total) }, [total, onTotalChange])
 
-  const fields = useMemo(
-    () => [...(stage.fields ?? [])].sort((a, b) => a.position - b.position),
-    [stage.fields],
-  )
+  const fields = useMemo(() => sortStageFields(stage.fields), [stage.fields])
 
   // Called by DraftRow on successful record creation; navigates to the last page
   // so the new row is immediately visible above the draft row.
@@ -1019,7 +1017,7 @@ function RecordDetailsModal({
         ) : (
           <div className="flex flex-col gap-5">
             {stagesWithData.map((stage, idx) => {
-              const fields = [...(stage.fields ?? [])].sort((a, b) => a.position - b.position)
+              const fields = sortStageFields(stage.fields)
               const valuesByKey = valuesForStage(record, stage.id)
               const isCurrent = stage.id === record.current_stage_id
 
@@ -1185,10 +1183,7 @@ function BulkImportModal({
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  const fields = useMemo(
-    () => [...(stage.fields ?? [])].sort((a, b) => a.position - b.position),
-    [stage.fields],
-  )
+  const fields = useMemo(() => sortStageFields(stage.fields), [stage.fields])
   const isMultiField = fields.length > 1
   const field = fields[0]
 

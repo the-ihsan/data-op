@@ -56,6 +56,10 @@ func (r *StageController) Index(ctx http.Context) http.Response {
 		return serverError(ctx, err)
 	}
 
+	for i := range stages {
+		services.SortStageFields(stages[i].Fields)
+	}
+
 	// Annotate each unique field and composite constraint with its cumulative
 	// duplicate-attempt count from uniqueness_conflict_counts, and each field
 	// with how many stored values exist (for safe editing in the UI).
