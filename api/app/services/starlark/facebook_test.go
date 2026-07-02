@@ -1,4 +1,4 @@
-package services
+package starlark
 
 import "testing"
 
@@ -122,56 +122,45 @@ func TestNormalizeFacebookPage(t *testing.T) {
 	}
 }
 
-func TestNormalizeFacebookProfileEquivalentHashes(t *testing.T) {
-	target := uniqueTarget{ref: "field:fb", fieldKeys: []string{"fb"}}
-
+func TestNormalizeFacebookProfileEquivalentVariants(t *testing.T) {
 	variants := []string{
 		"https://www.facebook.com/johndoe",
 		"http://facebook.com/johndoe/",
 		"https://m.facebook.com/johndoe",
 		"johndoe",
 	}
-	var hashes []string
+	var canonical []string
 	for _, v := range variants {
 		normalized, err := normalizeFacebookProfile(v)
 		if err != nil {
 			t.Fatalf("normalize %q: %v", v, err)
 		}
-		h, ok := targetHash(target, map[string][]string{"fb": {normalized}})
-		if !ok {
-			t.Fatalf("hash not ok for %q", v)
-		}
-		hashes = append(hashes, h)
+		canonical = append(canonical, normalized)
 	}
-	for i := 1; i < len(hashes); i++ {
-		if hashes[i] != hashes[0] {
-			t.Fatalf("variant hashes differ: %s vs %s", hashes[0], hashes[i])
+	for i := 1; i < len(canonical); i++ {
+		if canonical[i] != canonical[0] {
+			t.Fatalf("variants normalize differently: %s vs %s", canonical[0], canonical[i])
 		}
 	}
 }
 
-func TestNormalizeFacebookGroupEquivalentHashes(t *testing.T) {
-	target := uniqueTarget{ref: "field:grp", fieldKeys: []string{"grp"}}
+func TestNormalizeFacebookGroupEquivalentVariants(t *testing.T) {
 	variants := []string{
 		"mygroup",
 		"https://www.facebook.com/groups/mygroup/",
 		"https://m.facebook.com/groups/mygroup/about",
 	}
-	var hashes []string
+	var canonical []string
 	for _, v := range variants {
 		normalized, err := normalizeFacebookGroup(v)
 		if err != nil {
 			t.Fatalf("normalize %q: %v", v, err)
 		}
-		h, ok := targetHash(target, map[string][]string{"grp": {normalized}})
-		if !ok {
-			t.Fatalf("hash not ok for %q", v)
-		}
-		hashes = append(hashes, h)
+		canonical = append(canonical, normalized)
 	}
-	for i := 1; i < len(hashes); i++ {
-		if hashes[i] != hashes[0] {
-			t.Fatalf("variant hashes differ: %s vs %s", hashes[0], hashes[i])
+	for i := 1; i < len(canonical); i++ {
+		if canonical[i] != canonical[0] {
+			t.Fatalf("variants normalize differently: %s vs %s", canonical[0], canonical[i])
 		}
 	}
 }

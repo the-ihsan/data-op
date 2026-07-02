@@ -428,7 +428,7 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 				return err
 			}
 			rawValues := map[string][]string{field.Key: {val}}
-			valuesByKey, err := services.StoreValues(tx, record.ID, firstStage.ID, fields, rawValues)
+			valuesByKey, err := services.StoreValues(tx, record.ID, firstStage.ID, fields, rawValues, firstStage.SanitizeEntry)
 			if err != nil {
 				return err
 			}

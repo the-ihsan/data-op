@@ -1,6 +1,6 @@
 module goravel
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/gin-gonic/gin v1.11.0
@@ -9,6 +9,8 @@ require (
 	github.com/goravel/mysql v1.17.1
 	github.com/goravel/postgres v1.17.1
 	github.com/stretchr/testify v1.11.1
+	go.starlark.net v0.0.0-20260630144053-529d8e869a14
+	gorm.io/gorm v1.31.1
 )
 
 require (
@@ -142,8 +144,8 @@ require (
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/term v0.39.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
@@ -153,6 +155,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
-	gorm.io/gorm v1.31.1 // indirect
 	gorm.io/plugin/dbresolver v1.6.2 // indirect
 )

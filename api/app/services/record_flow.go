@@ -89,24 +89,6 @@ func normalizeField(field models.StageField, raw []string) ([]string, error) {
 			if !options[v] {
 				return nil, ErrValidation{fmt.Sprintf("'%s' is not a valid option for field '%s'", v, field.Label)}
 			}
-		case models.FieldTypeFacebookProfile:
-			normalized, err := normalizeFacebookProfile(v)
-			if err != nil {
-				return nil, ErrValidation{fmt.Sprintf("field '%s' must be a valid Facebook profile URL or username", field.Label)}
-			}
-			v = normalized
-		case models.FieldTypeFacebookGroup:
-			normalized, err := normalizeFacebookGroup(v)
-			if err != nil {
-				return nil, ErrValidation{fmt.Sprintf("field '%s' must be a valid Facebook group URL or slug", field.Label)}
-			}
-			v = normalized
-		case models.FieldTypeFacebookPage:
-			normalized, err := normalizeFacebookPage(v)
-			if err != nil {
-				return nil, ErrValidation{fmt.Sprintf("field '%s' must be a valid Facebook page URL or slug", field.Label)}
-			}
-			v = normalized
 		}
 		out = append(out, v)
 	}
@@ -138,7 +120,10 @@ func normalizeBool(v string) string {
 
 // StoreValues validates and persists a record's values at a stage, replacing any
 // existing values, and returns the normalized values grouped by field key.
-func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageField, raw map[string][]string) (map[string][]string, error) {
+// When sanitizeScript is non-empty the stage's Starlark sanitize function runs
+// on the submitted values first (see sanitize.go); it may rewrite values or
+// reject the entry with an ErrValidation.
+func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageField, raw map[string][]string, sanitizeScript string) (map[string][]string, error) {
 	fieldByKey := map[string]models.StageField{}
 	for _, f := range fields {
 		fieldByKey[f.Key] = f
@@ -149,6 +134,19 @@ func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageFiel
 		if _, ok := fieldByKey[key]; !ok {
 			return nil, ErrValidation{fmt.Sprintf("unknown field '%s' for this stage", key)}
 		}
+	}
+
+	if strings.TrimSpace(sanitizeScript) != "" {
+		sanitized, err := RunSanitize(sanitizeScript, raw)
+		if err != nil {
+			return nil, err
+		}
+		for key := range sanitized {
+			if _, ok := fieldByKey[key]; !ok {
+				return nil, ErrValidation{fmt.Sprintf("sanitize script returned unknown field '%s'", key)}
+			}
+		}
+		raw = sanitized
 	}
 
 	valuesByKey := map[string][]string{}

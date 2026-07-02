@@ -37,6 +37,8 @@ export interface Stage {
   campaign_id: number
   name: string
   position: number
+  /** Optional Starlark script defining sanitize(data) that sanitizes or rejects entry values. */
+  sanitize_entry: string
   fields?: StageField[]
   unique_constraints?: StageUniqueConstraint[]
 }
@@ -49,30 +51,6 @@ export type FieldType =
   | 'boolean'
   | 'select'
   | 'multiselect'
-  | 'facebook_profile'
-  | 'facebook_group'
-  | 'facebook_page'
-
-export const FACEBOOK_URL_FIELD_TYPES = [
-  'facebook_profile',
-  'facebook_group',
-  'facebook_page',
-] as const satisfies readonly FieldType[]
-
-export function isFacebookUrlField(type: FieldType): boolean {
-  return (FACEBOOK_URL_FIELD_TYPES as readonly string[]).includes(type)
-}
-
-export function facebookUrlPlaceholder(type: FieldType): string {
-  switch (type) {
-    case 'facebook_group':
-      return 'facebook.com/groups/…'
-    case 'facebook_page':
-      return 'facebook.com/pagename'
-    default:
-      return 'facebook.com/username'
-  }
-}
 
 export interface StageField {
   id: number

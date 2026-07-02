@@ -79,6 +79,10 @@ func (r *RecordValueController) Update(ctx http.Context) http.Response {
 		req.Values = map[string][]string{}
 	}
 
+	var stage models.Stage
+	if err := facades.Orm().Query().Where("id", record.CurrentStageID).First(&stage); err != nil {
+		return serverError(ctx, err)
+	}
 	fields, err := services.StageFields(facades.Orm().Query(), record.CurrentStageID)
 	if err != nil {
 		return serverError(ctx, err)
@@ -86,7 +90,7 @@ func (r *RecordValueController) Update(ctx http.Context) http.Response {
 
 	var conflictLabel string
 	txErr := facades.Orm().Transaction(func(tx orm.Query) error {
-		valuesByKey, err := services.StoreValues(tx, record.ID, record.CurrentStageID, fields, req.Values)
+		valuesByKey, err := services.StoreValues(tx, record.ID, record.CurrentStageID, fields, req.Values, stage.SanitizeEntry)
 		if err != nil {
 			return err
 		}

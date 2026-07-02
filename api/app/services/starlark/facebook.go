@@ -1,4 +1,4 @@
-package services
+package starlark
 
 import (
 	"fmt"
@@ -7,6 +7,16 @@ import (
 	"regexp"
 	"strings"
 )
+
+// The Facebook normalizers are exposed to sanitize scripts as the builtins
+// fb_profile / fb_group / fb_page. Each takes a raw string and returns a
+// (canonical_url, None) pair, or (None, "error message") on invalid input,
+// so equivalent URL variants dedupe to the same stored value.
+func init() {
+	RegisterStringNormalizer("fb_profile", normalizeFacebookProfile)
+	RegisterStringNormalizer("fb_group", normalizeFacebookGroup)
+	RegisterStringNormalizer("fb_page", normalizeFacebookPage)
+}
 
 var facebookSlugRe = regexp.MustCompile(`^[a-zA-Z0-9.\-_]{1,100}$`)
 

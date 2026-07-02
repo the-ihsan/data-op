@@ -49,10 +49,13 @@ export const memberApi = {
 export const stageApi = {
   list: (campaignId: number) =>
     unwrap<Stage[]>(api.get(`/campaigns/${campaignId}/stages`)),
-  create: (campaignId: number, body: { name: string; position?: number }) =>
+  create: (campaignId: number, body: { name: string; position?: number; sanitize_entry?: string }) =>
     unwrap<Stage>(api.post(`/campaigns/${campaignId}/stages`, body)),
-  update: (campaignId: number, stageId: number, body: { name?: string; position?: number }) =>
-    unwrap<Stage>(api.put(`/campaigns/${campaignId}/stages/${stageId}`, body)),
+  update: (
+    campaignId: number,
+    stageId: number,
+    body: { name?: string; position?: number; sanitize_entry?: string },
+  ) => unwrap<Stage>(api.put(`/campaigns/${campaignId}/stages/${stageId}`, body)),
   remove: (campaignId: number, stageId: number) =>
     api.delete(`/campaigns/${campaignId}/stages/${stageId}`),
 }

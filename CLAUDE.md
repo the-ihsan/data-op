@@ -37,8 +37,9 @@ data-op/
 ## Tech stack
 
 - **API:** Go 1.24+, Goravel framework v1.17.2 (module name is `goravel`), GORM-backed
-  ORM via `facades.Orm()`, JWT auth via `facades.Auth()`, Gin HTTP driver. DB drivers
-  registered: postgres (default) **and** mysql (both in `bootstrap/providers.go`).
+ ORM via `facades.Orm()`, JWT auth via `facades.Auth()`, Gin HTTP driver. DB drivers
+ registered: postgres (default) **and** mysql (both in `bootstrap/providers.go`).
+ Embedded Starlark via `go.starlark.net` (stage sanitize scripts).
 - **UI:** React 19, Vite 8, TypeScript 6, react-router-dom v7, @tanstack/react-query v5,
   axios. Package manager is **pnpm** (`pnpm-lock.yaml`). Styling: **Tailwind CSS v4**
   (`@tailwindcss/vite`) + **shadcn/ui** (Radix primitives, new-york style) in
@@ -112,11 +113,22 @@ a unique `email` at Intake).
   `can_delete`. Owner = full control; **owner-only**: settings, member management.
   **owner or manager** (`services.CanManage`): stage/field/constraint structure.
   Record data actions use add/edit/delete via `services.Authorize`.
-- **Stage** — ordered by `position` (0-based) within a campaign.
-- **StageField** — `type` ∈ text|textarea|number|date|boolean|select|multiselect|facebook_profile|facebook_group|facebook_page;
-  Facebook URL types are validated and canonicalized on the backend (`services/normalizeFacebookProfile`,
-  `normalizeFacebookGroup`, `normalizeFacebookPage`) so URL variants dedupe for uniqueness.
-  `required`, `is_unique`, `max_count` (0 = unlimited repeatable entries; select forced
+- **Stage** — ordered by `position` (0-based) within a campaign. Optional
+  `sanitize_entry` (nullable text): a **Starlark script that must define
+  `sanitize(data)`**; it runs (sandboxed, via `go.starlark.net`) on every value save /
+  bulk-import line at that stage **before** type validation and persistence. The
+  function receives the entry values as a dict (single-entry fields = strings,
+  multi-entry = lists), and returns either the sanitized dict or `None, "message"` to
+  reject (HTTP 400 with that message). See `services/sanitize.go` +
+  `services/starlark/`; scripts are compile-validated on stage create/update (400
+  `invalid sanitize script: …`) and **compiled programs are cached in memory by script
+  hash** so only the first run compiles. Scripts can call bound builtins `fb_profile`/
+  `fb_group`/`fb_page` (the Facebook normalizers in `services/starlark/facebook.go`)
+  which return `(canonical, None)` or `(None, "error")`. Not run when advancing seeds
+  inherited values (those were sanitized at their own stage).
+- **StageField** — `type` ∈ text|textarea|number|date|boolean|select|multiselect
+  (the former facebook_* field types were removed — Facebook URL canonicalization now
+  happens via the `fb_*` sanitize-script builtins instead). `required`, `is_unique`, `max_count` (0 = unlimited repeatable entries; select forced
   to 1), `options` (JSON array string, choice types only), `prev_stage_key` (key of a
   field in the immediately-previous stage whose value seeds this field), `position`.
 - **StageUniqueConstraint** — composite uniqueness: `field_keys` (JSON array string).
@@ -147,14 +159,27 @@ a unique `email` at Intake).
   - `access.go` — RBAC: `Membership`, `CanView`, `CanManage`, `Authorize(perm)`.
   - `uniqueness.go` — `EnforceUniqueness(tx, recordID, stageID, valuesByKey)` +
     `targetHash` (unit-tested).
-  - `record_flow.go` — `StoreValues` (validate/normalize/persist), `ValidateRequired`,
+  - `record_flow.go` — `StoreValues` (sanitize → validate/normalize → persist; takes
+    the stage's `sanitize_entry` script as its last arg), `ValidateRequired`,
     `Advance` (transactional: validate → transition → seed inherited → advance/finish),
     `LoadValuesByKey`, `StageFields`, `ErrValidation`/`ErrUniquenessConflict`, `Now()`.
+  - `sanitize.go` — thin wrapper over `services/starlark` for stage `sanitize_entry`
+    scripts: `RunSanitize(script, valuesByKey)` + `ValidateSanitizeScript(script)`
+    (unit-tested). Rejections/script errors map to `ErrValidation`.
+  - `starlark/` — embedded Starlark runner: `Run`, `Validate`, `RejectionError`,
+    `RegisterStringNormalizer(name, fn)` (bind Go `func(string) (string, error)` as a
+    script builtin returning a `(value, err)` pair — register from `init()`, before any
+    compile). Compiled `*starlark.Program`s cached by sha256 of the script (map reset
+    at 256 entries); each run re-inits globals from the cached program. Bounded by 5M
+    execution steps + 1s wall-clock cancel; while/recursion enabled; hermetic (no
+    imports/IO, undefined names fail at compile). `facebook.go` holds the Facebook
+    profile/group/page normalizers and registers them as the `fb_profile`/`fb_group`/
+    `fb_page` builtins in its `init()`.
 - `app/providers/app_service_provider.go` — registers the seeder; wired in
   `bootstrap/providers.go`.
 - `database/migrations/` — registered in `bootstrap/migrations.go`. `20260101000001..04`
   create users / campaigns+members / stages+fields+constraints / records+values+keys+
-  transitions.
+  transitions; `20260702000002` adds `stages.sanitize_entry` (nullable text).
 - `database/seeders/database_seeder.go` — demo data; registered via AppServiceProvider.
 - `routes/api.go` — all `/api/v1` routes (registered in `bootstrap/app.go` WithRouting).
   Public: `auth/register`, `auth/login`. Everything else behind `middleware.Auth()`.
@@ -168,7 +193,9 @@ a unique `email` at Intake).
 auth: `POST register|login`, `GET me`, `POST logout` ·
 campaigns: `GET/POST /campaigns`, `GET/PUT/DELETE /campaigns/{campaign}` ·
 members: `GET/POST …/members`, `PUT/DELETE …/members/{member}` ·
-stages: `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` ·
+stages: `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` (create/update accept
+`sanitize_entry` — Starlark script defining `sanitize(data)`, compile-validated, empty
+string clears it) ·
 fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` ·
 constraints: `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` ·
 records: `GET/POST …/records`, `POST …/records/bulk` (bulk import; first stage must
@@ -198,7 +225,10 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  Campaigns, CampaignDetail (tabs: **Timeline**/stages/members/analytics/settings —
  the `records` tab key renders the timeline), RecordDetail (dynamic form + flow
  actions; inherited `prev_stage_key` fields render disabled). `components/`:
-  StageBuilder, Members, Settings, AnalyticsPanel, `DynamicForm` (form engine), and
+  StageBuilder (fields/constraints editor + per-stage collapsible **"Sanitize entry
+  (Starlark)"** textarea saved via `stageApi.update`, with a **"?" button opening a
+  guide dialog** — I/O shape, example, bound `fb_*` functions, sandbox limits; backend
+  400s from invalid scripts show inline), Members, Settings, AnalyticsPanel, `DynamicForm` (form engine), and
   `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style
  grid** (shadcn `Table`) with one editable cell per field. Cells save on blur/Enter

@@ -18,8 +18,23 @@ func NewStageController() *StageController {
 }
 
 type stageRequest struct {
-	Name     string `json:"name"`
-	Position *int   `json:"position"`
+	Name          string  `json:"name"`
+	Position      *int    `json:"position"`
+	SanitizeEntry *string `json:"sanitize_entry"`
+}
+
+// resolveSanitizeEntry trims and validates a submitted sanitize_entry script.
+// An empty string clears the script. Returns the value to store and an error
+// message ("" when valid).
+func resolveSanitizeEntry(raw string) (string, string) {
+	script := strings.TrimSpace(raw)
+	if script == "" {
+		return "", ""
+	}
+	if err := services.ValidateSanitizeScript(script); err != nil {
+		return "", "invalid sanitize script: " + err.Error()
+	}
+	return script, ""
 }
 
 func (r *StageController) Index(ctx http.Context) http.Response {
@@ -104,6 +119,13 @@ func (r *StageController) Store(ctx http.Context) http.Response {
 	}
 
 	stage := models.Stage{CampaignID: campaign.ID, Name: req.Name, Position: position}
+	if req.SanitizeEntry != nil {
+		script, errMsg := resolveSanitizeEntry(*req.SanitizeEntry)
+		if errMsg != "" {
+			return badRequest(ctx, errMsg)
+		}
+		stage.SanitizeEntry = script
+	}
 	if err := facades.Orm().Query().Create(&stage); err != nil {
 		return serverError(ctx, err)
 	}
@@ -128,6 +150,13 @@ func (r *StageController) Update(ctx http.Context) http.Response {
 	}
 	if req.Position != nil {
 		stage.Position = *req.Position
+	}
+	if req.SanitizeEntry != nil {
+		script, errMsg := resolveSanitizeEntry(*req.SanitizeEntry)
+		if errMsg != "" {
+			return badRequest(ctx, errMsg)
+		}
+		stage.SanitizeEntry = script
 	}
 	if err := facades.Orm().Query().Save(stage); err != nil {
 		return serverError(ctx, err)
