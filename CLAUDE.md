@@ -36,7 +36,7 @@ data-op/
 
 ## Tech stack
 
-- **API:** Go 1.24+, Goravel framework v1.17.2 (module name is `goravel`), GORM-backed
+- **API:** Go 1.25+, Goravel framework v1.17.2 (module name is `goravel`), GORM-backed
  ORM via `facades.Orm()`, JWT auth via `facades.Auth()`, Gin HTTP driver. DB drivers
  registered: postgres (default) **and** mysql (both in `bootstrap/providers.go`).
  Embedded Starlark via `go.starlark.net` (stage sanitize scripts).
@@ -63,7 +63,9 @@ go run .                        # serve http://127.0.0.1:3001 (APP_PORT in api/.
 go test ./...
 ```
 Frontend (`ui/`): `pnpm install` then `pnpm run dev` → http://127.0.0.1:5173 (add shadcn
-components with `pnpm dlx shadcn@latest add <name>`). Vite proxies
+components with `pnpm dlx shadcn@latest add <name>`). After changing Starlark/WASM code
+run `pnpm run build:wasm` (or `scripts/build-sanitize-wasm.sh`) so `public/wasm/sanitize.wasm`
+stays in sync. Vite proxies
 `/api/*` to `:3001` (see `ui/vite.config.ts`) — **the proxy target must match
 `APP_PORT` in `api/.env`**, so the SPA calls same-origin `/api/v1/...`. Gotcha: a
 stale compiled backend binary left listening on another port answers with 404s for
@@ -238,7 +240,10 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   editor with field list (badges for rules, inline edit/delete), **Add field** panel
   (default value, allow-multiple checkbox with max-count only when checked, inherit-from-prev
   copies label+type read-only and other options editable), composite-unique + collapsible
-  **Sanitize entry (Starlark)** with guide dialog. Backend 409s when edits would lose data.
+  **Sanitize entry (Starlark)** — CodeMirror editor (`StarlarkEditor`) with Python syntax
+  highlighting, autocomplete for builtins/snippets, and live error lint via a Go WASM
+  module (`api/wasm/sanitize` → `ui/public/wasm/sanitize.wasm`, built by
+  `scripts/build-sanitize-wasm.sh`; runs the same `starlark.Validate` as the API) plus guide dialog. Backend 409s when edits would lose data.
   Members, Settings, AnalyticsPanel, `DynamicForm` (form engine; applies `default_value`
   when empty), and `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style

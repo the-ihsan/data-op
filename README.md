@@ -35,7 +35,7 @@ data-op/
 
 ### Prerequisites
 
-- Go ≥ 1.24, Node ≥ 20, **pnpm**
+- Go ≥ 1.25, Node ≥ 20, **pnpm**
 - MySQL or MariaDB (local install), **or** PostgreSQL if you prefer
 
 The API supports both MySQL and PostgreSQL (`DB_CONNECTION` in `api/.env`). Local dev

@@ -5,8 +5,8 @@ import { stageApi } from '@/api/resources'
 import type { Stage } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { SANITIZE_PLACEHOLDER } from './constants'
 import SanitizeGuideDialog from './SanitizeGuideDialog'
+import StarlarkEditor from './StarlarkEditor'
 
 export default function SanitizeSection({
   campaignId,
@@ -46,14 +46,7 @@ export default function SanitizeSection({
 
       {open && (
         <div className="mt-3 space-y-2">
-          <textarea
-            value={script}
-            onChange={(e) => setScript(e.target.value)}
-            placeholder={SANITIZE_PLACEHOLDER}
-            rows={8}
-            spellCheck={false}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          />
+          <StarlarkEditor value={script} onChange={setScript} />
           <p className="text-xs text-muted-foreground">
             The script must define <code className="rounded bg-muted px-1">sanitize(data)</code>. It receives
             entry values as a dict and returns the sanitized dict, or{' '}
