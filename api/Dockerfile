@@ -1,3 +1,9 @@
+# Production image is built from the repository root.
+# See /Dockerfile and deploy/docker-compose.prod.yml
+#
+# Dev-only quick build (no UI):
+#   docker build -t dataop-api-dev .
+
 FROM golang:alpine AS builder
 
 ENV GO111MODULE=on \
@@ -13,8 +19,7 @@ FROM alpine:latest
 WORKDIR /www
 
 COPY --from=builder /build/main /www/
-COPY --from=builder /build/.env /www/.env
-COPY --from=builder /build/public/ /www/public/
 COPY --from=builder /build/resources/ /www/resources/
 
+# .env is supplied at runtime via env_file / environment — never bake secrets in.
 ENTRYPOINT ["/www/main"]

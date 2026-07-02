@@ -24,10 +24,13 @@ fields, uniqueness, record data-flow with locking + inheritance + audit, analyti
 
 ```
 data-op/
-  api/   # Goravel (Go) REST API + PostgreSQL
-  ui/    # React SPA (Vite + TypeScript)
-  README.md    # human-facing setup/run instructions
-  CLAUDE.md    # this file
+  api/         # Goravel (Go) REST API
+  ui/          # React SPA (Vite + TypeScript)
+  Dockerfile   # production: ui/dist → api/public + Go binary
+  deploy/      # docker-compose.prod.yml, deploy.sh, env.example
+  .github/workflows/deploy.yml
+  README.md
+  CLAUDE.md
 ```
 
 ## Tech stack
@@ -68,6 +71,26 @@ routes added later — if a registered route 404s, check for and kill old `gorav
 **Demo login (after seed):** username `alice` / password `password` — owns the "Customer
 Feedback" campaign (Intake → Triage → Resolution, with an inherited `email` field and
 a unique `email` at Intake).
+
+## Production deployment (VPS)
+
+- **Single binary + static files:** root `Dockerfile` runs `pnpm build` in `ui/`, copies
+  `dist/` to `api/public/`, then `go build`. Goravel serves built assets via
+  `routes/web.go` (`Fallback` → file from `public/` or `index.html` for SPA routes).
+  API routes register first (`bootstrap/app.go`: `Api()` then `Web()`).
+- **Stack:** `deploy/docker-compose.prod.yml` — `app` + MySQL 8.4. Volumes `db_data`
+  (database) and `app_storage` (sessions/logs). **Never** `docker compose down -v` in prod.
+- **Deploy:** `deploy/deploy.sh` — rebuild app image, `up -d`, `artisan migrate` only.
+  `deploy/entrypoint.sh` also runs `migrate` on container start (idempotent).
+- **CI/CD:** `.github/workflows/deploy.yml` — test on PR/push; on `main` push, SSH to VPS
+  (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` secrets), `git pull --ff-only`, `./deploy/deploy.sh`.
+- **Data safety:** deploy scripts never call `migrate:fresh`/`migrate:reset`/`migrate:refresh`.
+  Only `artisan migrate` (pending migrations only).
+- **Prod env:** copy `deploy/env.example` → `deploy/.env`; set `DB_PASSWORD`,
+  `DB_DATABASE`, `APP_KEY`, `JWT_SECRET`, `APP_URL`. DB vars: `DB_HOST=db` (bundled MySQL
+  service name), `DB_USERNAME=root`. External DB: remove `db` service from compose, set
+  `DB_HOST` to real host. `APP_HOST=0.0.0.0`, `APP_ENV=production`, `APP_DEBUG=false`.
+  Dev still uses Vite on `:5173` with API proxy.
 
 ## Domain model & concurrency
 
@@ -118,6 +141,9 @@ a unique `email` at Intake).
 - `database/seeders/database_seeder.go` — demo data; registered via AppServiceProvider.
 - `routes/api.go` — all `/api/v1` routes (registered in `bootstrap/app.go` WithRouting).
   Public: `auth/register`, `auth/login`. Everything else behind `middleware.Auth()`.
+- `routes/web.go` — production: `Fallback` serves files from `./public` (built UI) or
+  `index.html` for SPA routes. Gin `Static("/", …)` conflicts with `/api`, so assets are
+  served via the fallback handler. Dev: `public/` is empty; use Vite dev server instead.
 - `config/cors.go` — `paths` set to `["*"]` (must be non-empty or CORS is disabled).
 
 ## API surface (`/api/v1`, JWT via `Authorization: Bearer <token>`)

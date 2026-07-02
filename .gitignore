@@ -1,0 +1,4 @@
+deploy/.env
+ui/dist
+api/public/*
+!api/public/.gitkeep

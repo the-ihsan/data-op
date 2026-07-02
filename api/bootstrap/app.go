@@ -12,8 +12,8 @@ func Boot() contractsfoundation.Application {
 	return foundation.Setup().
 		WithMigrations(Migrations).
 		WithRouting(func() {
-			routes.Web()
 			routes.Api()
+			routes.Web()
 			routes.Grpc()
 		}).
 		WithProviders(Providers).

@@ -103,3 +103,124 @@ return a JWT; send it as `Authorization: Bearer <token>` on every other call.
 cd api && go test ./...
 cd ui && pnpm run build  # type-check + bundle
 ```
+
+## Production deployment (VPS)
+
+The production stack serves the **built UI static assets from Goravel** (same origin as
+`/api/v1`). Only `ui/dist` is baked into the image at build time — no Node runtime on the
+server.
+
+### Layout
+
+| Path | Purpose |
+|------|---------|
+| `Dockerfile` | Multi-stage: `pnpm build` → copy to `api/public/` → `go build` |
+| `deploy/docker-compose.prod.yml` | App + MySQL with **named volumes** (`db_data`, `app_storage`) |
+| `deploy/deploy.sh` | Safe deploy: rebuild app, `up -d`, **`artisan migrate` only** |
+| `deploy/env.example` | Production `.env` template (includes DB vars) |
+| `.github/workflows/deploy.yml` | CI tests + SSH deploy on push to `main` |
+
+### Database configuration
+
+The default stack **bundles MySQL 8.4** in `docker-compose.prod.yml`. You only need to
+set database variables in `deploy/.env` — Docker Compose creates the database and the app
+connects over the internal `db` hostname.
+
+**Required variables in `deploy/.env`:**
+
+| Variable | Example | Notes |
+|----------|---------|-------|
+| `DB_CONNECTION` | `mysql` | Must be `mysql` for the bundled stack |
+| `DB_HOST` | `db` | **Leave as `db`** — Docker service name, not `127.0.0.1` |
+| `DB_PORT` | `3306` | Default MySQL port |
+| `DB_DATABASE` | `dataop` | Database name; created automatically on first start |
+| `DB_USERNAME` | `root` | Bundled stack uses the MySQL root user |
+| `DB_PASSWORD` | *(strong secret)* | Sets **both** `MYSQL_ROOT_PASSWORD` and the app password |
+
+`docker-compose.prod.yml` reads `DB_PASSWORD` and `DB_DATABASE` to initialize the MySQL
+container. The app service overrides `DB_HOST=db` so the API reaches MySQL on the Docker
+network (not via localhost on the host).
+
+**Example `deploy/.env` database block:**
+
+```bash
+DB_CONNECTION=mysql
+DB_HOST=db
+DB_PORT=3306
+DB_DATABASE=dataop
+DB_USERNAME=root
+DB_PASSWORD=your-long-random-password-here
+```
+
+On first `deploy.sh` run, Compose starts MySQL, waits until it is healthy, then the app
+entrypoint runs `artisan migrate` to create tables. Data is stored in the `db_data` volume
+and survives container rebuilds.
+
+**Optional — external MySQL (existing server or managed DB):**
+
+1. Remove or comment out the `db` service in `deploy/docker-compose.prod.yml`.
+2. Remove `depends_on: db` from the `app` service.
+3. Set `DB_HOST` to your database hostname/IP (e.g. `127.0.0.1` if MySQL runs on the VPS
+   host, or a managed-DB endpoint).
+4. Set `DB_USERNAME`, `DB_PASSWORD`, and `DB_DATABASE` to match your existing database.
+5. Create the empty database manually if it does not exist yet.
+6. Run `./deploy.sh` — migrations still apply via `artisan migrate` only.
+
+For Postgres instead of MySQL, switch `DB_CONNECTION=postgres`, point `DB_*` at your
+Postgres instance, and remove the bundled `db` service (the compose file ships MySQL only).
+
+### First-time VPS setup
+
+```bash
+# On the VPS
+sudo mkdir -p /opt/data-op && sudo chown $USER /opt/data-op
+git clone <repo-url> /opt/data-op
+cd /opt/data-op/deploy
+cp env.example .env
+# Edit .env: set DB_PASSWORD, DB_DATABASE, APP_URL, then generate APP_KEY + JWT_SECRET
+
+# Generate secrets (after first build):
+docker compose -f docker-compose.prod.yml build app
+docker compose -f docker-compose.prod.yml run --rm app ./main artisan key:generate --show
+docker compose -f docker-compose.prod.yml run --rm app ./main artisan jwt:secret --show
+
+chmod +x deploy.sh && ./deploy.sh
+```
+
+Open `http://<vps-ip>:3000` (or put Caddy/nginx in front for TLS).
+
+### CI/CD (GitHub Actions)
+
+On every PR/push: `go test ./...` + `pnpm run build`.
+
+On push to `main`: SSH to the VPS, `git pull --ff-only`, run `deploy/deploy.sh`.
+
+**Required repository secrets:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`. Optional:
+`VPS_SSH_PORT`, `VPS_APP_DIR` (default `/opt/data-op`).
+
+### Data safety
+
+**Subsequent deploys are safe.** Each run of `deploy.sh` (manual or via CI) only rebuilds
+the **app** image and restarts containers. The MySQL `db` container is left running with
+its `db_data` volume intact. Existing rows are kept; only new/pending migrations are applied.
+
+- Migrations use **`artisan migrate` only** (applies pending migrations; never drops data).
+- **`migrate:fresh` / `migrate:reset` / `migrate:refresh` are never run** in deploy scripts
+  or CI.
+- MySQL data lives in the `db_data` Docker volume — survives image rebuilds and container
+  restarts.
+- **Never** run `docker compose down -v` in production (the `-v` flag deletes volumes).
+
+**What would destroy data (avoid these):**
+
+- `docker compose down -v` or `docker volume rm …db_data`
+- `artisan migrate:fresh` / `migrate:reset` / `migrate:refresh`
+- Deleting and recreating the `db` service without re-attaching the same `db_data` volume
+
+### Local production smoke test
+
+```bash
+cd deploy && cp env.example .env   # adjust DB_PASSWORD
+./deploy.sh
+# → http://127.0.0.1:3000 serves UI + API
+```

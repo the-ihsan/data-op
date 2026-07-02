@@ -1,0 +1,49 @@
+# Production stack for a VPS. Data persists in named volumes — never run
+# `docker compose down -v` in production (that deletes db_data).
+#
+# First-time setup:
+#   cp env.example .env && edit secrets
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Updates (also used by CI/CD via deploy.sh):
+#   ./deploy.sh
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MYSQL_DATABASE: ${DB_DATABASE:?set DB_DATABASE in .env}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: dataop-app:latest
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      APP_HOST: 0.0.0.0
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USERNAME: root
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app_storage:/app/storage
+
+volumes:
+  db_data:
+  app_storage:

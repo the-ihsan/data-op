@@ -6,3 +6,5 @@
 !.env.example
 storage
 tmp
+public/*
+!public/.gitkeep
