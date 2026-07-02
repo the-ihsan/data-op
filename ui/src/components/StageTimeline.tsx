@@ -661,7 +661,24 @@ function DraftRow({
         )}
         {error && <div className="mt-1 text-[11px] text-destructive">{error}</div>}
       </TableCell>
-      <TableCell />
+      <TableCell className="p-1">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 w-full"
+          disabled={!draftDirty || create.isPending}
+          onClick={() => commit(local)}
+        >
+          {create.isPending ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" />
+              Save
+            </>
+          ) : (
+            'Save'
+          )}
+        </Button>
+      </TableCell>
     </TableRow>
   )
 }
