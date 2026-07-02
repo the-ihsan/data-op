@@ -10,6 +10,22 @@ import (
 	"goravel/app/services"
 )
 
+// aggregation scan targets — plain structs; no ORM model required.
+type stageAggrRow struct {
+	CurrentStageID uint  `gorm:"column:current_stage_id"`
+	Count          int64 `gorm:"column:cnt"`
+}
+
+type statusAggrRow struct {
+	Status string `gorm:"column:status"`
+	Count  int64  `gorm:"column:cnt"`
+}
+
+type throughputRow struct {
+	Date  string `gorm:"column:day"`
+	Count int64  `gorm:"column:cnt"`
+}
+
 type AnalyticsController struct{}
 
 func NewAnalyticsController() *AnalyticsController {
@@ -32,31 +48,64 @@ func (r *AnalyticsController) Show(ctx http.Context) http.Response {
 		return serverError(ctx, err)
 	}
 
-	var records []models.Record
-	if err := facades.Orm().Query().Where("campaign_id", campaign.ID).Get(&records); err != nil {
+	// Total record count.
+	totalRecords, err := facades.Orm().Query().Model(&models.Record{}).Where("campaign_id", campaign.ID).Count()
+	if err != nil {
 		return serverError(ctx, err)
 	}
 
-	stageName := map[uint]string{}
-	for _, s := range stages {
-		stageName[s.ID] = s.Name
+	// Records per stage — one GROUP BY query instead of a full table scan.
+	var stageRows []stageAggrRow
+	if err := facades.Orm().Query().
+		Model(&models.Record{}).
+		Where("campaign_id", campaign.ID).
+		SelectRaw("current_stage_id, COUNT(*) as cnt").
+		GroupBy("current_stage_id").
+		Scan(&stageRows); err != nil {
+		return serverError(ctx, err)
+	}
+	byStageCount := make(map[uint]int64, len(stageRows))
+	for _, r := range stageRows {
+		byStageCount[r.CurrentStageID] = r.Count
 	}
 
-	byStageCount := map[uint]int{}
-	statusCount := map[string]int{
+	// Records per status — one GROUP BY query.
+	var statusRows []statusAggrRow
+	if err := facades.Orm().Query().
+		Model(&models.Record{}).
+		Where("campaign_id", campaign.ID).
+		SelectRaw("status, COUNT(*) as cnt").
+		GroupBy("status").
+		Scan(&statusRows); err != nil {
+		return serverError(ctx, err)
+	}
+	statusCount := map[string]int64{
 		models.RecordStatusOpen:       0,
 		models.RecordStatusProcessing: 0,
 		models.RecordStatusFinished:   0,
 	}
-	throughput := map[string]int{}
-
-	for _, rec := range records {
-		byStageCount[rec.CurrentStageID]++
-		statusCount[rec.Status]++
-		if rec.Status == models.RecordStatusFinished && rec.UpdatedAt != nil {
-			throughput[rec.UpdatedAt.ToDateString()]++
-		}
+	for _, r := range statusRows {
+		statusCount[r.Status] = r.Count
 	}
+
+	// Finished-record throughput by day — one GROUP BY query.
+	var throughputRows []throughputRow
+	if err := facades.Orm().Query().
+		Model(&models.Record{}).
+		Where("campaign_id", campaign.ID).
+		Where("status", models.RecordStatusFinished).
+		SelectRaw("DATE(updated_at) as day, COUNT(*) as cnt").
+		GroupBy("DATE(updated_at)").
+		Scan(&throughputRows); err != nil {
+		return serverError(ctx, err)
+	}
+	throughputSeries := make([]http.Json, 0, len(throughputRows))
+	for _, r := range throughputRows {
+		throughputSeries = append(throughputSeries, http.Json{"date": r.Date, "count": r.Count})
+	}
+	sort.Slice(throughputSeries, func(i, j int) bool {
+		return throughputSeries[i]["date"].(string) < throughputSeries[j]["date"].(string)
+	})
 
 	byStage := make([]http.Json, 0, len(stages))
 	for _, s := range stages {
@@ -68,16 +117,8 @@ func (r *AnalyticsController) Show(ctx http.Context) http.Response {
 		})
 	}
 
-	throughputSeries := make([]http.Json, 0, len(throughput))
-	for date, count := range throughput {
-		throughputSeries = append(throughputSeries, http.Json{"date": date, "count": count})
-	}
-	sort.Slice(throughputSeries, func(i, j int) bool {
-		return throughputSeries[i]["date"].(string) < throughputSeries[j]["date"].(string)
-	})
-
 	return ok(ctx, http.Json{
-		"total_records": len(records),
+		"total_records": totalRecords,
 		"by_stage":      byStage,
 		"by_status":     statusCount,
 		"throughput":    throughputSeries,

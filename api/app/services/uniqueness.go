@@ -120,7 +120,13 @@ func EnforceUniqueness(tx orm.Query, recordID, stageID uint, valuesByKey map[str
 	if err != nil {
 		return "", err
 	}
+	return enforceUniquenessFrom(tx, recordID, stageID, valuesByKey, targets)
+}
 
+// enforceUniquenessFrom is the core uniqueness check using pre-loaded targets.
+// Callers that process many records against the same stage (e.g. bulk import)
+// should pre-load targets once and call this directly via BulkUniquenessChecker.
+func enforceUniquenessFrom(tx orm.Query, recordID, stageID uint, valuesByKey map[string][]string, targets []uniqueTarget) (string, error) {
 	if _, err := tx.Where("record_id", recordID).Where("stage_id", stageID).Delete(&models.RecordStageKey{}); err != nil {
 		return "", err
 	}
@@ -152,4 +158,28 @@ func EnforceUniqueness(tx orm.Query, recordID, stageID uint, valuesByKey map[str
 		}
 	}
 	return "", nil
+}
+
+// BulkUniquenessChecker pre-loads a stage's uniqueness targets once and applies
+// them for every record in a bulk operation, eliminating the two per-iteration
+// DB queries that EnforceUniqueness would otherwise issue.
+type BulkUniquenessChecker struct {
+	targets []uniqueTarget
+	stageID uint
+}
+
+// NewBulkUniquenessChecker loads the targets for stageID. The returned checker
+// is valid for as long as the stage schema does not change (safe for the
+// lifetime of a single bulk-import request).
+func NewBulkUniquenessChecker(tx orm.Query, stageID uint) (*BulkUniquenessChecker, error) {
+	targets, err := stageUniqueTargets(tx, stageID)
+	if err != nil {
+		return nil, err
+	}
+	return &BulkUniquenessChecker{targets: targets, stageID: stageID}, nil
+}
+
+// Enforce runs the uniqueness check for one record using the pre-loaded targets.
+func (c *BulkUniquenessChecker) Enforce(tx orm.Query, recordID uint, valuesByKey map[string][]string) (string, error) {
+	return enforceUniquenessFrom(tx, recordID, c.stageID, valuesByKey, c.targets)
 }

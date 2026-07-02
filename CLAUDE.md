@@ -240,6 +240,23 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   - `components/ui/` holds shadcn primitives (button, badge, table, input, select,
     dropdown-menu, popover, dialog, sheet); `components.json` configures the shadcn CLI.
 
+## Query patterns & performance
+
+- **No read N+1 on list endpoints**: record listing uses `With("Values")` (batched preload),
+ history resolves users/stages with two `WhereIn` queries, stages use `With("Fields")` +
+ `With("UniqueConstraints")` (batched). Goravel `With()` maps to GORM `Preload()` — one
+ `IN` query per association, not one per parent row.
+- **Bulk import**: uniqueness targets are pre-loaded once via `services.NewBulkUniquenessChecker`
+ before the per-line transaction loop, eliminating 2×N extra schema queries.
+- **`StoreValues` / `seedInheritedValues`**: rows are accumulated and inserted in a single
+ batch `tx.Create(&rows)` call rather than one INSERT per entry.
+- **Constraint field-key validation**: single `WhereIn("key", keys)` instead of N `First` calls.
+- **Analytics**: uses `GroupBy` + `Scan` aggregation queries (records per stage/status,
+ throughput per day) — never loads all record rows into memory.
+- **`EnforceUniqueness`**: still does one SELECT + one INSERT per uniqueness target per call;
+ the per-target selects are bounded by the stage schema (typically 1–5 targets). This is
+ the expected cost for each individual value-save or advance.
+
 ## Gotchas / conventions learned (don't re-discover these)
 
 - **Goravel `First()` returns nil error when no row found** (leaves dest zero-valued).

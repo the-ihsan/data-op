@@ -388,6 +388,13 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 		return badRequest(ctx, "no values provided")
 	}
 
+	// Pre-load uniqueness targets once for the whole import — EnforceUniqueness
+	// would otherwise re-query the stage schema on every iteration.
+	checker, err := services.NewBulkUniquenessChecker(facades.Orm().Query(), firstStage.ID)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+
 	type FailedEntry struct {
 		Index int    `json:"index"`
 		Error string `json:"error"`
@@ -425,7 +432,7 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 			if err != nil {
 				return err
 			}
-			label, err := services.EnforceUniqueness(tx, record.ID, firstStage.ID, valuesByKey)
+			label, err := checker.Enforce(tx, record.ID, valuesByKey)
 			if err != nil {
 				return err
 			}

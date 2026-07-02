@@ -156,6 +156,7 @@ func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageFiel
 		return nil, err
 	}
 
+	var rows []models.RecordValue
 	for _, field := range fields {
 		entries, err := normalizeField(field, raw[field.Key])
 		if err != nil {
@@ -166,17 +167,19 @@ func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageFiel
 		}
 		valuesByKey[field.Key] = entries
 		for i, v := range entries {
-			row := models.RecordValue{
+			rows = append(rows, models.RecordValue{
 				RecordID:   recordID,
 				StageID:    stageID,
 				FieldID:    field.ID,
 				FieldKey:   field.Key,
 				Value:      v,
 				ValueIndex: i,
-			}
-			if err := tx.Create(&row); err != nil {
-				return nil, err
-			}
+			})
+		}
+	}
+	if len(rows) > 0 {
+		if err := tx.Create(&rows); err != nil {
+			return nil, err
 		}
 	}
 	return valuesByKey, nil
@@ -292,6 +295,7 @@ func seedInheritedValues(tx orm.Query, recordID uint, next *models.Stage, prevVa
 		return err
 	}
 	seeded := map[string][]string{}
+	var rows []models.RecordValue
 	for _, f := range fields {
 		if f.PrevStageKey == "" {
 			continue
@@ -302,17 +306,19 @@ func seedInheritedValues(tx orm.Query, recordID uint, next *models.Stage, prevVa
 		}
 		seeded[f.Key] = vals
 		for i, v := range vals {
-			row := models.RecordValue{
+			rows = append(rows, models.RecordValue{
 				RecordID:   recordID,
 				StageID:    next.ID,
 				FieldID:    f.ID,
 				FieldKey:   f.Key,
 				Value:      v,
 				ValueIndex: i,
-			}
-			if err := tx.Create(&row); err != nil {
-				return err
-			}
+			})
+		}
+	}
+	if len(rows) > 0 {
+		if err := tx.Create(&rows); err != nil {
+			return err
 		}
 	}
 	if len(seeded) > 0 {

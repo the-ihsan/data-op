@@ -37,14 +37,24 @@ func (r *StageConstraintController) Store(ctx http.Context) http.Response {
 		return badRequest(ctx, "a composite constraint needs at least two field keys")
 	}
 
-	// Every key must belong to this stage.
-	for _, key := range req.FieldKeys {
-		var f models.StageField
-		if err := facades.Orm().Query().Where("stage_id", stage.ID).Where("key", key).First(&f); err != nil {
-			return serverError(ctx, err)
+	// Validate all field keys in a single query.
+	keyArgs := make([]any, len(req.FieldKeys))
+	for i, k := range req.FieldKeys {
+		keyArgs[i] = k
+	}
+	var validFields []models.StageField
+	if err := facades.Orm().Query().Where("stage_id", stage.ID).WhereIn("key", keyArgs).Get(&validFields); err != nil {
+		return serverError(ctx, err)
+	}
+	if len(validFields) != len(req.FieldKeys) {
+		found := make(map[string]bool, len(validFields))
+		for _, f := range validFields {
+			found[f.Key] = true
 		}
-		if f.ID == 0 {
-			return badRequest(ctx, "unknown field key: "+key)
+		for _, k := range req.FieldKeys {
+			if !found[k] {
+				return badRequest(ctx, "unknown field key: "+k)
+			}
 		}
 	}
 
