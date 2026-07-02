@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/goravel/framework/contracts/database/orm"
+	"github.com/goravel/framework/facades"
+	"gorm.io/gorm"
 
 	"goravel/app/models"
 )
@@ -81,6 +83,33 @@ func targetHash(t uniqueTarget, valuesByKey map[string][]string) (string, bool) 
 	return hex.EncodeToString(sum[:]), true
 }
 
+// incrementConflictCount bumps the hit counter for a uniqueness constraint outside
+// any surrounding transaction, so the increment persists even if the caller's
+// transaction is rolled back. Errors are silently swallowed — a missed counter
+// increment is non-fatal.
+//
+// A single atomic UPDATE (SET count = count + 1) avoids the read-modify-write
+// race that two concurrent conflict events would introduce. The INSERT only runs
+// the very first time a given constraint is hit; if two concurrent "firsts" race
+// on INSERT the duplicate-key error is ignored (one write wins, off by 1 at
+// most — acceptable for a stats counter).
+func incrementConflictCount(stageID uint, constraintRef string) {
+	result, _ := facades.Orm().Query().
+		Model(&models.UniquenessConflictCount{}).
+		Where("stage_id", stageID).
+		Where("constraint_ref", constraintRef).
+		Update("count", gorm.Expr("count + 1"))
+	if result == nil || result.RowsAffected == 0 {
+		// Row does not exist yet — this is the first conflict for this constraint.
+		row := models.UniquenessConflictCount{
+			StageID:       stageID,
+			ConstraintRef: constraintRef,
+			Count:         1,
+		}
+		_ = facades.Orm().Query().Create(&row)
+	}
+}
+
 // EnforceUniqueness validates and reserves stage-level uniqueness for a record.
 // It clears any keys previously reserved for (record, stage), then for each target
 // checks whether another record already holds the same value combination. On a
@@ -109,6 +138,7 @@ func EnforceUniqueness(tx orm.Query, recordID, stageID uint, valuesByKey map[str
 			return "", err
 		}
 		if existing.ID != 0 {
+			incrementConflictCount(stageID, t.ref)
 			return t.label, nil
 		}
 		key := models.RecordStageKey{

@@ -125,7 +125,13 @@ a unique `email` at Intake).
 - **RecordValue** — flat EAV: one row per entry (`value_index` for repeatable fields),
   grouped by `field_key`. Multiselect = multiple rows (one per selected option).
 - **RecordStageKey** — uniqueness dedup: `(stage_id, constraint_ref, normalized_hash)`
-  unique index. `constraint_ref` is `field:<key>` or `constraint:<id>`.
+ unique index. `constraint_ref` is `field:<key>` or `constraint:<id>`.
+- **UniquenessConflictCount** — hit counter: one row per `(stage_id, constraint_ref)`
+ pair; `count` increments each time `EnforceUniqueness` detects a duplicate. Written
+ outside the surrounding ORM transaction (via `facades.Orm().Query()` directly) so it
+ persists even when the caller's transaction rolls back. Exposed as `conflict_count` on
+ `StageField` (is_unique fields) and `StageUniqueConstraint` in the stages API response;
+ displayed as amber badges in `RecordDetailsModal`.
 - **RecordTransition** — audit trail of stage moves (`from`/`to`/`moved_by`/`note`).
 
 ## Backend structure (`api/`)

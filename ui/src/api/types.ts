@@ -86,12 +86,16 @@ export interface StageField {
   options: string // JSON-encoded string[]
   prev_stage_key: string
   position: number
+  /** Cumulative number of duplicate-attempt rejections for this unique field. */
+  conflict_count?: number
 }
 
 export interface StageUniqueConstraint {
   id: number
   stage_id: number
   field_keys: string // JSON-encoded string[]
+  /** Cumulative number of duplicate-attempt rejections for this composite constraint. */
+  conflict_count?: number
 }
 
 export type RecordStatus = 'open' | 'processing' | 'finished'

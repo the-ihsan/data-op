@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/goravel/framework/contracts/http"
@@ -39,6 +40,36 @@ func (r *StageController) Index(ctx http.Context) http.Response {
 		Get(&stages); err != nil {
 		return serverError(ctx, err)
 	}
+
+	// Annotate each unique field and composite constraint with its cumulative
+	// duplicate-attempt count from uniqueness_conflict_counts.
+	stageIDs := make([]any, len(stages))
+	for i, s := range stages {
+		stageIDs[i] = s.ID
+	}
+	if len(stageIDs) > 0 {
+		var counts []models.UniquenessConflictCount
+		if err := facades.Orm().Query().WhereIn("stage_id", stageIDs).Get(&counts); err == nil {
+			type key struct{ stageID uint; ref string }
+			cm := map[key]uint64{}
+			for _, c := range counts {
+				cm[key{c.StageID, c.ConstraintRef}] = c.Count
+			}
+			for i := range stages {
+				for j := range stages[i].Fields {
+					if stages[i].Fields[j].IsUnique {
+						ref := "field:" + stages[i].Fields[j].Key
+						stages[i].Fields[j].ConflictCount = cm[key{stages[i].ID, ref}]
+					}
+				}
+				for j := range stages[i].UniqueConstraints {
+					ref := fmt.Sprintf("constraint:%d", stages[i].UniqueConstraints[j].ID)
+					stages[i].UniqueConstraints[j].ConflictCount = cm[key{stages[i].ID, ref}]
+				}
+			}
+		}
+	}
+
 	return ok(ctx, stages)
 }
 

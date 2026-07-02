@@ -24,6 +24,7 @@ import {
   Pencil,
   Play,
   Plus,
+  ShieldAlert,
   Square,
   Trash2,
   Upload,
@@ -31,7 +32,7 @@ import {
   X,
 } from 'lucide-react'
 import { recordApi, stageApi } from '../api/resources'
-import { facebookUrlPlaceholder, isFacebookUrlField, parseOptions, type BulkImportResult, type Campaign, type RecordRow, type RecordTransitionEntry, type Stage, type StageField } from '../api/types'
+import { facebookUrlPlaceholder, isFacebookUrlField, parseFieldKeys, parseOptions, type BulkImportResult, type Campaign, type RecordRow, type RecordTransitionEntry, type Stage, type StageField, type StageUniqueConstraint } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -951,6 +952,9 @@ function RecordDetailsModal({
                               ))
                             )}
                           </span>
+                          {f.is_unique && (f.conflict_count ?? 0) > 0 && (
+                            <ConflictCountBadge count={f.conflict_count!} />
+                          )}
                         </div>
                       )
                     })}
@@ -958,6 +962,22 @@ function RecordDetailsModal({
                       <div className="px-3 py-2.5 text-xs text-muted-foreground">No fields defined.</div>
                     )}
                   </div>
+                  {/* Composite constraint conflict counts */}
+                  {(stage.unique_constraints ?? []).some((c) => (c.conflict_count ?? 0) > 0) && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {(stage.unique_constraints ?? [])
+                        .filter((c): c is StageUniqueConstraint => (c.conflict_count ?? 0) > 0)
+                        .map((c) => (
+                          <div key={c.id} className="flex items-center gap-2 rounded-md bg-red-900 px-2.5 py-1.5">
+                            <ShieldAlert className="size-3.5 shrink-0 text-red-50" />
+                            <span className="flex-1 text-xs text-red-50">
+                              Composite unique ({parseFieldKeys(c).join(' + ')})
+                            </span>
+                            <ConflictCountBadge count={c.conflict_count!} />
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -983,6 +1003,18 @@ function RecordDetailsModal({
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ConflictCountBadge({ count }: { count: number }) {
+  return (
+    <span
+      title={`${count} duplicate attempt${count !== 1 ? 's' : ''} blocked`}
+      className="flex shrink-0 items-center gap-1 rounded-full bg-red-900 px-2 py-0.5 text-[10px] font-semibold text-red-50"
+    >
+      <ShieldAlert className="size-3" />
+      {count}
+    </span>
   )
 }
 

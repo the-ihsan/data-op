@@ -38,14 +38,16 @@ func IsChoiceType(t string) bool {
 
 type StageField struct {
 	orm.Model
-	StageID      uint   `json:"stage_id" gorm:"index"`
-	Key          string `json:"key"`
-	Label        string `json:"label"`
-	Type         string `json:"type"`
-	Required     bool   `json:"required"`
-	IsUnique     bool   `json:"is_unique"`
-	MaxCount     int    `json:"max_count"` // 0 = unlimited entries
-	Options      string `json:"options" gorm:"type:text"`
-	PrevStageKey string `json:"prev_stage_key"`
-	Position     int    `json:"position"`
+	StageID       uint   `json:"stage_id" gorm:"index"`
+	Key           string `json:"key"`
+	Label         string `json:"label"`
+	Type          string `json:"type"`
+	Required      bool   `json:"required"`
+	IsUnique      bool   `json:"is_unique"`
+	MaxCount      int    `json:"max_count"` // 0 = unlimited entries
+	Options       string `json:"options" gorm:"type:text"`
+	PrevStageKey  string `json:"prev_stage_key"`
+	Position      int    `json:"position"`
+	// ConflictCount is populated at query time from uniqueness_conflict_counts; never persisted.
+	ConflictCount uint64 `json:"conflict_count" gorm:"-"`
 }
