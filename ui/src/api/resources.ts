@@ -70,6 +70,7 @@ export interface FieldInput {
   max_count?: number
   options?: string[]
   prev_stage_key?: string
+  default_value?: string
   position?: number
 }
 

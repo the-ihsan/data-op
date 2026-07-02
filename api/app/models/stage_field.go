@@ -41,7 +41,10 @@ type StageField struct {
 	MaxCount      int    `json:"max_count"` // 0 = unlimited entries
 	Options       string `json:"options" gorm:"type:text"`
 	PrevStageKey  string `json:"prev_stage_key"`
+	DefaultValue  string `json:"default_value"`
 	Position      int    `json:"position"`
 	// ConflictCount is populated at query time from uniqueness_conflict_counts; never persisted.
 	ConflictCount uint64 `json:"conflict_count" gorm:"-"`
+	// ValueCount is populated at query time from record_values; never persisted.
+	ValueCount uint64 `json:"value_count" gorm:"-"`
 }

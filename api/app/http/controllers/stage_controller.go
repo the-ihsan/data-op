@@ -57,10 +57,37 @@ func (r *StageController) Index(ctx http.Context) http.Response {
 	}
 
 	// Annotate each unique field and composite constraint with its cumulative
-	// duplicate-attempt count from uniqueness_conflict_counts.
+	// duplicate-attempt count from uniqueness_conflict_counts, and each field
+	// with how many stored values exist (for safe editing in the UI).
 	stageIDs := make([]any, len(stages))
+	fieldIDs := make([]any, 0)
 	for i, s := range stages {
 		stageIDs[i] = s.ID
+		for j := range stages[i].Fields {
+			fieldIDs = append(fieldIDs, stages[i].Fields[j].ID)
+		}
+	}
+	if len(fieldIDs) > 0 {
+		type valueCountRow struct {
+			FieldID uint  `gorm:"column:field_id"`
+			Count   int64 `gorm:"column:cnt"`
+		}
+		var valueCounts []valueCountRow
+		if err := facades.Orm().Query().Model(&models.RecordValue{}).
+			Select("field_id, COUNT(*) as cnt").
+			WhereIn("field_id", fieldIDs).
+			Group("field_id").
+			Scan(&valueCounts); err == nil {
+			vm := map[uint]uint64{}
+			for _, row := range valueCounts {
+				vm[row.FieldID] = uint64(row.Count)
+			}
+			for i := range stages {
+				for j := range stages[i].Fields {
+					stages[i].Fields[j].ValueCount = vm[stages[i].Fields[j].ID]
+				}
+			}
+		}
 	}
 	if len(stageIDs) > 0 {
 		var counts []models.UniquenessConflictCount

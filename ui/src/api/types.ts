@@ -63,9 +63,12 @@ export interface StageField {
   max_count: number
   options: string // JSON-encoded string[]
   prev_stage_key: string
+  default_value: string
   position: number
   /** Cumulative number of duplicate-attempt rejections for this unique field. */
   conflict_count?: number
+  /** Number of stored record values for this field (populated in stages list). */
+  value_count?: number
 }
 
 export interface StageUniqueConstraint {
@@ -148,7 +151,23 @@ export interface Analytics {
   throughput: { date: string; count: number }[]
 }
 
-/** Parse a field's JSON-encoded option list into a string array. */
+/** Build initial cell values from field default_value definitions. */
+export function defaultValuesForFields(fields: StageField[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const f of fields) {
+    if (!f.default_value) continue
+    if (f.type === 'multiselect') {
+      out[f.key] = f.default_value.split(',').map((s) => s.trim()).filter(Boolean)
+    } else if (f.type === 'boolean') {
+      const v = f.default_value.toLowerCase()
+      out[f.key] = [v === 'true' || v === '1' || v === 'yes' ? 'true' : 'false']
+    } else {
+      out[f.key] = [f.default_value]
+    }
+  }
+  return out
+}
+
 export function parseOptions(field: StageField): string[] {
   if (!field.options) return []
   try {

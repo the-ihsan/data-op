@@ -15,5 +15,6 @@ func Migrations() []schema.Migration {
 		&migrations.M20260101000004CreateRecordsTables{},
 		&migrations.M20260702000001CreateUniquenessConflictCounts{},
 		&migrations.M20260702000002AddSanitizeEntryToStages{},
+		&migrations.M20260703000001AddDefaultValueToStageFields{},
 	}
 }

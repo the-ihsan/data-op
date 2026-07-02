@@ -130,7 +130,13 @@ a unique `email` at Intake).
   (the former facebook_* field types were removed — Facebook URL canonicalization now
   happens via the `fb_*` sanitize-script builtins instead). `required`, `is_unique`, `max_count` (0 = unlimited repeatable entries; select forced
   to 1), `options` (JSON array string, choice types only), `prev_stage_key` (key of a
-  field in the immediately-previous stage whose value seeds this field), `position`.
+  field in the immediately-previous stage whose value seeds this field), `default_value`
+  (optional pre-fill for new entries at this stage), `position`. Stages list API also
+  annotates each field with `value_count` (stored record values) for safe editing in the UI.
+  Field updates reject changes that would orphan data: type/key/inheritance locked when
+  `value_count > 0`; `max_count` cannot drop below peak per-record usage; choice options
+  in use cannot be removed. Inherited fields (`prev_stage_key` set) must keep the same
+  label and type as the referenced previous-stage field.
 - **StageUniqueConstraint** — composite uniqueness: `field_keys` (JSON array string).
 - **Record** — `current_stage_id`, `status` (open|processing|finished), `locked_by`,
   `created_by`.
@@ -179,7 +185,8 @@ a unique `email` at Intake).
   `bootstrap/providers.go`.
 - `database/migrations/` — registered in `bootstrap/migrations.go`. `20260101000001..04`
   create users / campaigns+members / stages+fields+constraints / records+values+keys+
-  transitions; `20260702000002` adds `stages.sanitize_entry` (nullable text).
+  transitions; `20260702000002` adds `stages.sanitize_entry` (nullable text);
+  `20260703000001` adds `stage_fields.default_value` (nullable text).
 - `database/seeders/database_seeder.go` — demo data; registered via AppServiceProvider.
 - `routes/api.go` — all `/api/v1` routes (registered in `bootstrap/app.go` WithRouting).
   Public: `auth/register`, `auth/login`. Everything else behind `middleware.Auth()`.
@@ -225,11 +232,14 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  Campaigns, CampaignDetail (tabs: **Timeline**/stages/members/analytics/settings —
  the `records` tab key renders the timeline), RecordDetail (dynamic form + flow
  actions; inherited `prev_stage_key` fields render disabled). `components/`:
-  StageBuilder (fields/constraints editor + per-stage collapsible **"Sanitize entry
-  (Starlark)"** textarea saved via `stageApi.update`, with a **"?" button opening a
-  guide dialog** — I/O shape, example, bound `fb_*` functions, sandbox limits; backend
-  400s from invalid scripts show inline), Members, Settings, AnalyticsPanel, `DynamicForm` (form engine), and
-  `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
+  StageBuilder — pipeline-style stage builder (`components/stage-builder/`): horizontal **stage tabs**
+  (numbered pills with field counts) + **Add stage** button on the right; selected stage shows a card
+  editor with field list (badges for rules, inline edit/delete), **Add field** panel
+  (default value, allow-multiple checkbox with max-count only when checked, inherit-from-prev
+  copies label+type read-only and other options editable), composite-unique + collapsible
+  **Sanitize entry (Starlark)** with guide dialog. Backend 409s when edits would lose data.
+  Members, Settings, AnalyticsPanel, `DynamicForm` (form engine; applies `default_value`
+  when empty), and `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style
  grid** (shadcn `Table`) with one editable cell per field. Cells save on blur/Enter
  via `recordApi.saveValues` (per-record, current stage). Required-field validation only

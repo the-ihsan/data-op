@@ -1,4 +1,4 @@
-import { parseOptions, type StageField } from '../api/types'
+import { parseOptions, defaultValuesForFields, type StageField } from '../api/types'
 
 export type FormValues = Record<string, string[]>
 
@@ -44,7 +44,12 @@ export default function DynamicForm({
   return (
     <div>
       {fields.map((field) => {
-        const entries = values[field.key] ?? ['']
+        const defaults = defaultValuesForFields([field])[field.key]
+        const rawEntries = values[field.key]
+        const entries =
+          rawEntries && rawEntries.some((v) => v !== '')
+            ? rawEntries
+            : defaults ?? ['']
         const options = parseOptions(field)
         const canAddMore = field.max_count === 0 || entries.length < field.max_count
         const repeatable = field.type !== 'multiselect' && field.max_count !== 1

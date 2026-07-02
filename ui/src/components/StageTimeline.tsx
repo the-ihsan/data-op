@@ -32,7 +32,7 @@ import {
   X,
 } from 'lucide-react'
 import { recordApi, stageApi } from '../api/resources'
-import { parseFieldKeys, parseOptions, type BulkImportResult, type Campaign, type RecordRow, type RecordTransitionEntry, type Stage, type StageField, type StageUniqueConstraint } from '../api/types'
+import { parseFieldKeys, parseOptions, defaultValuesForFields, type BulkImportResult, type Campaign, type RecordRow, type RecordTransitionEntry, type Stage, type StageField, type StageUniqueConstraint } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -516,7 +516,7 @@ function DraftRow({
   onCreated: () => void
 }) {
   const qc = useQueryClient()
-  const [local, setLocal] = useState<CellValues>({})
+  const [local, setLocal] = useState<CellValues>(() => defaultValuesForFields(fields))
   const [error, setError] = useState<string | null>(null)
 
   const create = useMutation({
@@ -532,7 +532,7 @@ function DraftRow({
       }
     },
     onSuccess: () => {
-      setLocal({})
+      setLocal(defaultValuesForFields(fields))
       setError(null)
       onCreated()
       qc.invalidateQueries({ queryKey: ['records', campaign.id] })
