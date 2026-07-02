@@ -7,220 +7,219 @@ stage-by-stage — picked up ("processing"), enriched, then advanced. Later stag
 inherit values from earlier ones, fields can be marked unique (individually or as a
 composite), and access is governed by per-campaign RBAC.
 
-- **`api/`** — Goravel (Go) REST API + PostgreSQL
-- **`ui/`** — React SPA (Vite + TypeScript)
+```
+data-op/
+  api/       # Goravel (Go) REST API
+  ui/        # React SPA (Vite + TypeScript)
+  deploy/    # docker-compose.prod.yml, deploy.sh
+  Dockerfile # production: ui/dist → api/public + Go binary
+```
 
 ## Features
 
-- **Campaigns** with visibility (public/private), status, and a per-campaign
-  concurrency mode: `allow_concurrent_edit=false` locks a record to one user while
-  it is being processed; `true` allows concurrent edits (last-write-wins).
-- **Stages & dynamic fields** — types: text, textarea, number, date, boolean,
-  select, multiselect. Per field: `required`, `is_unique`, `max_count`
-  (0 = unlimited repeatable entries), options, and `prev_stage_key` (inherit a value
-  from the previous stage).
-- **Stage-level uniqueness** — a single field (`is_unique`) or a composite
-  constraint (a set of field keys) must be unique across records at that stage;
-  duplicates are rejected with `409 Conflict`.
-- **Per-campaign RBAC** — owner / manager / member, with `add` / `edit` / `delete`
-  permissions. Owners manage settings, members, and the stage structure.
-- **Data-flow engine** — mark processing (with locking), advance (validate required
-  fields + uniqueness, seed inherited fields, record an audit transition), release.
+- **Campaigns** with visibility (public/private), status, and per-campaign concurrency
+  (`allow_concurrent_edit=false` locks a record while processing; `true` allows
+  concurrent edits, last-write-wins).
+- **Stages & dynamic fields** — text, textarea, number, date, boolean, select,
+  multiselect; per field: `required`, `is_unique`, `max_count` (0 = unlimited
+  repeatable entries), options, and `prev_stage_key` (inherit from the previous stage).
+- **Stage-level uniqueness** — single-field or composite constraints; duplicates
+  return `409 Conflict`.
+- **Per-campaign RBAC** — owner / manager / member with `add` / `edit` / `delete`
+  permissions. Owners manage settings, members, and stage structure.
+- **Data-flow engine** — mark processing (with locking), advance (validate, seed
+  inherited fields, audit transition), release.
 - **Analytics** — record counts by stage and status, plus finished-record throughput.
 
-## Prerequisites
+## Local development
 
-- Go ≥ 1.24, Node ≥ 20, and either PostgreSQL or Docker.
+### Prerequisites
 
-## 1. Start PostgreSQL
+- Go ≥ 1.24, Node ≥ 20, **pnpm**
+- MySQL or MariaDB (local install), **or** PostgreSQL if you prefer
 
-Using Docker (matches the default `api/.env`):
+The API supports both MySQL and PostgreSQL (`DB_CONNECTION` in `api/.env`). Local dev
+defaults to **MySQL on `127.0.0.1:3306`**.
+
+### 1. Database
+
+Create a database and set credentials in `api/.env` (copy from `api/.env.example`):
+
+```bash
+cp api/.env.example api/.env
+# Edit DB_* — example for local MySQL:
+#   DB_CONNECTION=mysql
+#   DB_HOST=127.0.0.1
+#   DB_PORT=3306
+#   DB_DATABASE=dpt_dataop
+#   DB_USERNAME=root
+#   DB_PASSWORD=...
+```
+
+**PostgreSQL (optional):** set `DB_CONNECTION=postgres` and point `DB_*` at your
+instance. For Docker:
 
 ```bash
 docker run -d --name dataop-pg \
   -e POSTGRES_USER=dataop -e POSTGRES_PASSWORD=dataop -e POSTGRES_DB=dataop \
   -p 5433:5432 postgres:18
+# DB_HOST=127.0.0.1  DB_PORT=5433  DB_DATABASE=dataop  DB_USERNAME=dataop  DB_PASSWORD=dataop
 ```
 
-Or point `api/.env` (`DB_*`) at your own Postgres.
-
-## 2. Run the API (`api/`)
+### 2. API (`api/`)
 
 ```bash
 cd api
-cp .env.example .env         # then set DB_* / see values below
 go run . artisan key:generate
 go run . artisan jwt:secret
 go run . artisan migrate
 go run . artisan db:seed      # optional: demo campaign + user
-go run .                      # serves http://127.0.0.1:3000
+go run .                      # http://127.0.0.1:3001 (APP_PORT in api/.env)
 ```
 
-A ready-to-use `.env` is already present in this repo with the Docker DB settings
-above (`DB_HOST=127.0.0.1`, `DB_PORT=5433`, `DB_DATABASE/USERNAME/PASSWORD=dataop`).
+Set `GOFLAGS=-mod=mod` if the Go module cache complains.
 
-**Demo login** (after `db:seed`): `alice@dataop.dev` / `password` — owner of the
-seeded "Customer Feedback" campaign (Intake → Triage → Resolution).
-
-## 3. Run the UI (`ui/`)
+### 3. UI (`ui/`)
 
 ```bash
 cd ui
 pnpm install
-pnpm run dev                  # serves http://127.0.0.1:5173
+pnpm run dev                  # http://127.0.0.1:5173
 ```
 
-The Vite dev server proxies `/api/*` to the API on `:3000`, so just open
-<http://127.0.0.1:5173> and register or log in.
+Vite proxies `/api/*` to the API. **The proxy target must match `APP_PORT` in
+`api/.env`** (see `ui/vite.config.ts`). Open <http://127.0.0.1:5173> and register or
+log in.
+
+**Demo login** (after `db:seed`): username `alice` / password `password` — owner of
+the seeded "Customer Feedback" campaign (Intake → Triage → Resolution).
 
 ## API overview
 
-All endpoints are under `/api/v1`. `POST /auth/register` and `POST /auth/login`
-return a JWT; send it as `Authorization: Bearer <token>` on every other call.
+All endpoints are under `/api/v1`. `POST /auth/register` and `POST /auth/login` return
+a JWT; send it as `Authorization: Bearer <token>` on other calls.
 
-| Area      | Endpoints |
-|-----------|-----------|
-| Auth      | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout` |
+| Area | Endpoints |
+|------|-----------|
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout` |
 | Campaigns | `GET/POST /campaigns`, `GET/PUT/DELETE /campaigns/{campaign}` |
-| Members   | `GET/POST /campaigns/{campaign}/members`, `PUT/DELETE …/members/{member}` |
-| Stages    | `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` |
-| Fields    | `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` |
+| Members | `GET/POST …/members`, `PUT/DELETE …/members/{member}` |
+| Stages | `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` |
+| Fields | `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` |
 | Constraints | `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` |
-| Records   | `GET/POST …/records`, `GET …/records/{record}`, `GET/PUT …/records/{record}/values` |
+| Records | `GET/POST …/records`, `POST …/records/bulk`, `GET/DELETE …/records/{record}` |
+| Values | `GET/PUT …/records/{record}/values` |
+| History | `GET …/records/{record}/history` |
 | Data flow | `POST …/records/{record}/processing` · `…/release` · `…/advance` |
 | Analytics | `GET …/campaigns/{campaign}/analytics` |
+
+`GET …/records` supports `?stage=`, `?status=`, `?mine=true`, `?page=`, `?per_page=`.
 
 ## Data model
 
 `users`, `campaigns`, `campaign_members`, `stages`, `stage_fields`,
-`stage_unique_constraints`, `records`, `record_values` (flat, multi-entry via
-`value_index`), `record_stage_keys` (uniqueness dedup index), and
-`record_transitions` (stage-move audit trail).
+`stage_unique_constraints`, `records`, `record_values` (flat EAV, multi-entry via
+`value_index`), `record_stage_keys` (uniqueness dedup), `record_transitions` (audit).
 
 ## Tests
 
 ```bash
 cd api && go test ./...
-cd ui && pnpm run build  # type-check + bundle
+cd ui && pnpm run build      # type-check + bundle
 ```
 
 ## Production deployment (VPS)
 
-The production stack serves the **built UI static assets from Goravel** (same origin as
-`/api/v1`). Only `ui/dist` is baked into the image at build time — no Node runtime on the
-server.
+Production serves the **built UI from Goravel** (same origin as `/api/v1`). The root
+`Dockerfile` runs `pnpm build`, copies `ui/dist` to `api/public/`, then builds the Go
+binary. The stack in `deploy/docker-compose.prod.yml` is **app + MySQL 8.4** with named
+volumes (`db_data`, `app_storage`).
 
-### Layout
+### Release + deploy (recommended)
 
-| Path | Purpose |
-|------|---------|
-| `Dockerfile` | Multi-stage: `pnpm build` → copy to `api/public/` → `go build` |
-| `deploy/docker-compose.prod.yml` | App + MySQL with **named volumes** (`db_data`, `app_storage`) |
-| `deploy/deploy.sh` | Safe deploy: rebuild app, `up -d`, **`artisan migrate` only** |
-| `api/.env.example` | Env template for local dev and Docker production (`api/.env`) |
-| `.github/workflows/deploy.yml` | CI tests + SSH deploy on push to `main` |
-
-### Database configuration
-
-The default stack **bundles MySQL 8.4** in `docker-compose.prod.yml`. You only need to
-set database variables in `api/.env` — Docker Compose creates the database and the app
-connects over the internal `db` hostname.
-
-**Required variables in `api/.env`:**
-
-| Variable | Example | Notes |
-|----------|---------|-------|
-| `DB_CONNECTION` | `mysql` | Must be `mysql` for the bundled stack |
-| `DB_HOST` | `db` | **Leave as `db`** — Docker service name, not `127.0.0.1` |
-| `DB_PORT` | `3306` | Default MySQL port |
-| `DB_DATABASE` | `dataop` | Database name; created automatically on first start |
-| `DB_USERNAME` | `root` | Bundled stack uses the MySQL root user |
-| `DB_PASSWORD` | *(strong secret)* | Sets **both** `MYSQL_ROOT_PASSWORD` and the app password |
-
-`docker-compose.prod.yml` reads `DB_PASSWORD` and `DB_DATABASE` to initialize the MySQL
-container. The app service overrides `DB_HOST=db` so the API reaches MySQL on the Docker
-network (not via localhost on the host).
-
-**Example `api/.env` database block (Docker production):**
+1. Tag a release — CI builds the image and publishes to the container registry:
 
 ```bash
-DB_CONNECTION=mysql
-DB_HOST=db
-DB_PORT=3306
-DB_DATABASE=dataop
-DB_USERNAME=root
-DB_PASSWORD=your-long-random-password-here
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
-On first `deploy.sh` run, Compose starts MySQL, waits until it is healthy, then the app
-entrypoint runs `artisan migrate` to create tables. Data is stored in the `db_data` volume
-and survives container rebuilds.
-
-**Optional — external MySQL (existing server or managed DB):**
-
-1. Remove or comment out the `db` service in `deploy/docker-compose.prod.yml`.
-2. Remove `depends_on: db` from the `app` service.
-3. Set `DB_HOST` to your database hostname/IP (e.g. `127.0.0.1` if MySQL runs on the VPS
-   host, or a managed-DB endpoint).
-4. Set `DB_USERNAME`, `DB_PASSWORD`, and `DB_DATABASE` to match your existing database.
-5. Create the empty database manually if it does not exist yet.
-6. Run `./deploy.sh` — migrations still apply via `artisan migrate` only.
-
-For Postgres instead of MySQL, switch `DB_CONNECTION=postgres`, point `DB_*` at your
-Postgres instance, and remove the bundled `db` service (the compose file ships MySQL only).
-
-### First-time VPS setup
+2. On the VPS (no git clone required):
 
 ```bash
-# On the VPS
-sudo mkdir -p /opt/data-op && sudo chown $USER /opt/data-op
-git clone <repo-url> /opt/data-op
+curl -fsSL https://github.com/the-ihsan/data-op/raw/master/scripts/deploy.sh | bash -s -- v1.0.0
+```
+
+First run creates `/opt/data-op/api/.env` from the repo example — edit
+`DB_PASSWORD`, `DB_DATABASE`, and `APP_URL`, then re-run the same command. `APP_KEY` and
+`JWT_SECRET` are generated automatically. For a private image, set `DATAOP_REGISTRY_TOKEN` (GitHub PAT with `read:packages`)
+and `DATAOP_REGISTRY_USER` to your GitHub username.
+
+Deploy latest:
+
+```bash
+curl -fsSL https://github.com/the-ihsan/data-op/raw/master/scripts/deploy.sh | bash
+```
+
+Override defaults with env vars: `DATAOP_INSTALL_DIR`, `DATAOP_IMAGE`, `DATAOP_TAG`,
+`DATAOP_RAW_BASE`, `DATAOP_REGISTRY`, `DATAOP_REGISTRY_USER`, `DATAOP_REGISTRY_TOKEN`.
+
+### Local build (with repo checkout)
+
+```bash
 cp api/.env.example api/.env
-# Edit api/.env: set DB_PASSWORD, DB_DATABASE, APP_URL, then generate APP_KEY + JWT_SECRET
-cd /opt/data-op/deploy
-
-# Generate secrets (after first build):
-docker compose --env-file ../api/.env -f docker-compose.prod.yml build app
-docker compose --env-file ../api/.env -f docker-compose.prod.yml run --rm app ./main artisan key:generate --show
-docker compose --env-file ../api/.env -f docker-compose.prod.yml run --rm app ./main artisan jwt:secret --show
-
-chmod +x deploy.sh && ./deploy.sh
+# Set DB_PASSWORD, DB_DATABASE, APP_URL; APP_KEY + JWT_SECRET are auto-generated on deploy
+cd deploy && chmod +x deploy.sh && ./deploy.sh
 ```
 
-Open `http://<vps-ip>:3000` (or put Caddy/nginx in front for TLS).
+For local deploy without `scripts/deploy.sh`, generate secrets in `api/.env` manually
+(32-character alphanumeric strings) or run `go run . artisan key:generate` and
+`go run . artisan jwt:secret` from `api/` after copying `.env.example`.
 
-### CI/CD (GitHub Actions)
+Open `http://<vps-ip>:3000` (or put a reverse proxy in front for TLS).
 
-On every PR/push: `go test ./...` + `pnpm run build`.
+### Database (`api/.env`)
 
-On push to `main`: SSH to the VPS, `git pull --ff-only`, run `deploy/deploy.sh`.
+Compose reads `DB_PASSWORD` and `DB_DATABASE` to initialize MySQL. The app service
+overrides `DB_HOST=db` (Docker network hostname, not `127.0.0.1`).
 
-**Required repository secrets:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`. Optional:
-`VPS_SSH_PORT`, `VPS_APP_DIR` (default `/opt/data-op`).
+| Variable | Docker prod | Notes |
+|----------|-------------|-------|
+| `DB_CONNECTION` | `mysql` | Required for the bundled stack |
+| `DB_HOST` | `db` | Overridden by compose |
+| `DB_PORT` | `3306` | |
+| `DB_DATABASE` | e.g. `dataop` | Created on first MySQL start |
+| `DB_USERNAME` | `root` | Bundled stack uses root |
+| `DB_PASSWORD` | strong secret | Sets `MYSQL_ROOT_PASSWORD` and app password |
+
+`deploy.sh` rebuilds the app, runs `up -d`, then **`artisan migrate` only** (pending
+migrations; never drops data). The container entrypoint also runs migrate on start.
+
+**External MySQL:** remove the `db` service and `depends_on` from compose; set `DB_HOST`
+to your database hostname. **PostgreSQL:** set `DB_CONNECTION=postgres`, point `DB_*`
+at your instance, and remove the bundled `db` service.
+
+### CI/CD
+
+On PR/push to `main`: `go test ./...` + `pnpm run build`.
+
+On tag push (`v*`): build Docker image, push to `ghcr.io/the-ihsan/data-op:<tag>` and
+`:latest`, create a release with the deploy curl command.
+
+VPS deploy is manual: `curl -fsSL …/scripts/deploy.sh | bash -s -- <tag>`.
+
+Optional registry secret: `REGISTRY_TOKEN` (push/pull; falls back to `GITHUB_TOKEN`).
 
 ### Data safety
 
-**Subsequent deploys are safe.** Each run of `deploy.sh` (manual or via CI) only rebuilds
-the **app** image and restarts containers. The MySQL `db` container is left running with
-its `db_data` volume intact. Existing rows are kept; only new/pending migrations are applied.
-
-- Migrations use **`artisan migrate` only** (applies pending migrations; never drops data).
-- **`migrate:fresh` / `migrate:reset` / `migrate:refresh` are never run** in deploy scripts
-  or CI.
-- MySQL data lives in the `db_data` Docker volume — survives image rebuilds and container
-  restarts.
-- **Never** run `docker compose down -v` in production (the `-v` flag deletes volumes).
-
-**What would destroy data (avoid these):**
-
-- `docker compose down -v` or `docker volume rm …db_data`
-- `artisan migrate:fresh` / `migrate:reset` / `migrate:refresh`
-- Deleting and recreating the `db` service without re-attaching the same `db_data` volume
+- Migrations use **`artisan migrate` only** — never `migrate:fresh` / `migrate:reset` /
+  `migrate:refresh` in deploy scripts or CI.
+- MySQL data lives in the `db_data` volume — survives image rebuilds.
+- **Never** run `docker compose down -v` in production (`-v` deletes volumes).
 
 ### Local production smoke test
 
 ```bash
-cp api/.env.example api/.env   # set DB_PASSWORD, DB_DATABASE, APP_KEY, JWT_SECRET
+cp api/.env.example api/.env   # set DB_PASSWORD, DB_DATABASE; keys auto-generated on deploy
 cd deploy && ./deploy.sh
 # → http://127.0.0.1:3000 serves UI + API
 ```

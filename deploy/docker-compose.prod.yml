@@ -1,12 +1,12 @@
 # Production stack for a VPS. Data persists in named volumes — never run
 # `docker compose down -v` in production (that deletes db_data).
 #
-# First-time setup:
-#   cp api/.env.example api/.env && edit secrets
-#   ./deploy.sh
+# VPS (no source checkout):
+#   curl -fsSL https://github.com/the-ihsan/data-op/raw/master/scripts/deploy.sh | bash -s -- v1.2.3
 #
-# Updates (also used by CI/CD via deploy.sh):
-#   ./deploy.sh
+# Local with repo checkout (build image on machine):
+#   cp api/.env.example api/.env && edit secrets
+#   cd deploy && ./deploy.sh
 
 services:
   db:
@@ -28,7 +28,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    image: dataop-app:latest
+    image: ${DATAOP_IMAGE:-dataop-app}:${DATAOP_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${APP_PORT:-3000}:3000"

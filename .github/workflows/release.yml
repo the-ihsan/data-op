@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: api/go.sum
+
+      - name: API tests
+        working-directory: api
+        run: go test ./...
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: UI build
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            Deploy on the VPS:
+            ```bash
+            DATAOP_TAG=${{ github.ref_name }} curl -fsSL https://github.com/the-ihsan/data-op/raw/master/scripts/deploy.sh | bash
+            ```

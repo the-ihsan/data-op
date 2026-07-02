@@ -15,6 +15,19 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+random_key() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32; }
+env_var_value() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true; }
+set_env_var() {
+  if grep -qE "^${1}=" "$ENV_FILE"; then sed -i "s/^${1}=.*/${1}=${2}/" "$ENV_FILE"
+  else printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"; fi
+}
+for key in APP_KEY JWT_SECRET; do
+  if [[ -z "$(env_var_value "$key")" ]]; then
+    set_env_var "$key" "$(random_key)"
+    echo "==> Generated $key"
+  fi
+done
+
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml)
 
 # Guard against accidental destructive migration commands in this script.
@@ -26,6 +39,8 @@ for destructive in migrate:fresh migrate:reset migrate:refresh; do
 done
 
 echo "==> Building application image (UI dist + API binary)…"
+export DATAOP_IMAGE="${DATAOP_IMAGE:-dataop-app}"
+export DATAOP_TAG="${DATAOP_TAG:-latest}"
 "${COMPOSE[@]}" build app
 
 echo "==> Starting / updating services (database volume preserved)…"

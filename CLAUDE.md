@@ -27,8 +27,9 @@ data-op/
   api/         # Goravel (Go) REST API
   ui/          # React SPA (Vite + TypeScript)
   Dockerfile   # production: ui/dist → api/public + Go binary
-  deploy/      # docker-compose.prod.yml, deploy.sh
-  .github/workflows/deploy.yml
+  deploy/      # docker-compose.prod.yml, deploy.sh (local build)
+  scripts/     # deploy.sh (VPS curl | bash, no source checkout)
+  .github/workflows/deploy.yml, release.yml
   README.md
   CLAUDE.md
 ```
@@ -80,14 +81,24 @@ a unique `email` at Intake).
   API routes register first (`bootstrap/app.go`: `Api()` then `Web()`).
 - **Stack:** `deploy/docker-compose.prod.yml` — `app` + MySQL 8.4. Volumes `db_data`
   (database) and `app_storage` (sessions/logs). **Never** `docker compose down -v` in prod.
-- **Deploy:** `deploy/deploy.sh` — rebuild app image, `up -d`, `artisan migrate` only.
+  App image: `${DATAOP_IMAGE:-dataop-app}:${DATAOP_TAG:-latest}` (registry pull on VPS;
+  local `deploy/deploy.sh` builds and tags `dataop-app:latest`).
+- **VPS deploy (no git):** `scripts/deploy.sh` — curl \| bash; fetches compose from raw
+  repo URL, pulls pre-built image, `up -d`, `artisan migrate` only. Defaults:
+  `DATAOP_IMAGE=ghcr.io/the-ihsan/data-op`, `DATAOP_INSTALL_DIR=/opt/data-op`. Set
+  `DATAOP_REGISTRY_TOKEN` (GitHub PAT with `read:packages`) for private images. First run
+  seeds `api/.env` from example.
+- **Local prod smoke:** `deploy/deploy.sh` — rebuild app image, `up -d`, migrate.
   `deploy/entrypoint.sh` also runs `migrate` on container start (idempotent).
-- **CI/CD:** `.github/workflows/deploy.yml` — test on PR/push; on `main` push, SSH to VPS
-  (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` secrets), `git pull --ff-only`, `./deploy/deploy.sh`.
+- **CI/CD:** `.github/workflows/deploy.yml` — test on PR/push to `main`.
+  `.github/workflows/release.yml` — on tag `v*`: test, build+push image to
+  `ghcr.io/<repo>`, create GitHub release with deploy command. VPS deploy is manual:
+  `curl -fsSL …/scripts/deploy.sh | bash -s -- v1.2.3`.
 - **Data safety:** deploy scripts never call `migrate:fresh`/`migrate:reset`/`migrate:refresh`.
   Only `artisan migrate` (pending migrations only).
 - **Prod env:** copy `api/.env.example` → `api/.env`; set `DB_PASSWORD`,
-  `DB_DATABASE`, `APP_KEY`, `JWT_SECRET`, `APP_URL`. `deploy.sh` passes `--env-file
+  `api/.env` from example if missing; auto-generates `APP_KEY` + `JWT_SECRET`; user sets
+  `DB_PASSWORD`, `DB_DATABASE`, `APP_URL`. `deploy.sh` passes `--env-file
   api/.env`; compose overrides `APP_HOST=0.0.0.0`, `DB_HOST=db` for the app container.
 
 ## Domain model & concurrency
