@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Loader2,
   Lock,
   MoreHorizontal,
   Pencil,
@@ -431,8 +432,11 @@ function GridRow({
           className="mx-auto flex size-7 items-center justify-center rounded hover:bg-muted"
           title="Record actions"
           onClick={openMenu}
+          disabled={save.isPending}
         >
-          {record.status === 'finished' ? (
+          {save.isPending ? (
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          ) : record.status === 'finished' ? (
             <Check className="size-4 text-muted-foreground" />
           ) : (
             <MoreHorizontal className="size-4 text-muted-foreground/60" />
@@ -524,7 +528,13 @@ function DraftRow({
         </TableCell>
       ))}
       <TableCell className="text-xs text-muted-foreground">
-        {create.isPending ? 'Adding' : 'New'}
+        {create.isPending ? (
+          <span className="flex items-center gap-1">
+            <Loader2 className="size-3.5 animate-spin" /> Adding
+          </span>
+        ) : (
+          'New'
+        )}
         {error && <div className="mt-1 text-[11px] text-destructive">{error}</div>}
       </TableCell>
       <TableCell />
@@ -988,6 +998,7 @@ function RowActionsMenu({
   onDetails: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const [style, setStyle] = useState<CSSProperties>({
     position: 'fixed',
@@ -1029,47 +1040,52 @@ function RowActionsMenu({
     }
   }, [onClose])
 
-  const wrap = (fn: () => Promise<unknown>) => async () => {
+  const wrap = (name: string, fn: () => Promise<unknown>) => async () => {
+    setPendingAction(name)
+    setError(null)
     try {
       await fn()
       onDone()
       onClose()
     } catch (e) {
+      setPendingAction(null)
       setError((e as Error).message)
     }
   }
   const processing = record.status === 'processing'
   const finished = record.status === 'finished'
+  const busy = pendingAction !== null
 
-  const markProcessing = wrap(() => recordApi.markProcessing(campaign.id, record.id))
-  const release = wrap(() => recordApi.release(campaign.id, record.id))
-  const advance = wrap(() => recordApi.advance(campaign.id, record.id))
+  const markProcessing = wrap('processing', () => recordApi.markProcessing(campaign.id, record.id))
+  const release = wrap('release', () => recordApi.release(campaign.id, record.id))
+  const advance = wrap('advance', () => recordApi.advance(campaign.id, record.id))
   const remove = () => {
     if (!window.confirm('Delete this record permanently?')) return
-    void wrap(() => recordApi.remove(campaign.id, record.id))()
+    void wrap('delete', () => recordApi.remove(campaign.id, record.id))()
   }
 
   return createPortal(
     <div ref={ref} style={style} className="z-50" onContextMenu={(e) => e.preventDefault()}>
       <div className="flex min-w-44 flex-col gap-0.5 rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-lg">
         {error && <div className="max-w-56 px-1 pb-1 text-[11px] text-destructive">{error}</div>}
-        <Button variant="ghost" size="sm" className="justify-start" onClick={onDetails}>
+        <Button variant="ghost" size="sm" className="justify-start" onClick={onDetails} disabled={busy}>
           <FileText /> Details
         </Button>
         <div className="my-0.5 h-px bg-border" />
         {!finished && (
           <>
             {processing ? (
-              <Button variant="ghost" size="sm" className="justify-start" onClick={release}>
-                <Square /> Unmark processing
+              <Button variant="ghost" size="sm" className="justify-start" onClick={release} disabled={busy}>
+                {pendingAction === 'release' ? <Loader2 className="animate-spin" /> : <Square />} Unmark processing
               </Button>
             ) : (
-              <Button variant="ghost" size="sm" className="justify-start" onClick={markProcessing}>
-                <Play /> Mark processing
+              <Button variant="ghost" size="sm" className="justify-start" onClick={markProcessing} disabled={busy}>
+                {pendingAction === 'processing' ? <Loader2 className="animate-spin" /> : <Play />} Mark processing
               </Button>
             )}
-            <Button variant="ghost" size="sm" className="justify-start" onClick={advance}>
-              <ChevronRight /> {nextStage ? `Move to ${nextStage.name}` : 'Finish'}
+            <Button variant="ghost" size="sm" className="justify-start" onClick={advance} disabled={busy}>
+              {pendingAction === 'advance' ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+              {' '}{nextStage ? `Move to ${nextStage.name}` : 'Finish'}
             </Button>
           </>
         )}
@@ -1078,8 +1094,9 @@ function RowActionsMenu({
           size="sm"
           className="justify-start text-destructive hover:text-destructive"
           onClick={remove}
+          disabled={busy}
         >
-          <Trash2 /> Delete
+          {pendingAction === 'delete' ? <Loader2 className="animate-spin" /> : <Trash2 />} Delete
         </Button>
       </div>
     </div>,

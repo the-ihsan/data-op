@@ -37,7 +37,7 @@ func (r *RecordController) Index(ctx http.Context) http.Response {
 			q = q.Where("status", status)
 		}
 		if ctx.Request().Query("mine") == "true" {
-			q = q.Where("created_by", uid)
+			q = q.Where("created_by = ? OR id IN (SELECT record_id FROM record_transitions WHERE moved_by = ?)", uid, uid)
 		}
 		return q
 	}

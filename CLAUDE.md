@@ -180,7 +180,7 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  fails the just-created record is **rolled back** (deleted) and the draft is kept so
  the user can fix it — no orphan empty rows. After a successful create, the grid
  navigates to the last page so the new row is immediately visible.
-  - **"My data" / "All data"** toggle filters by `created_by` (`?mine=true` sent to backend); defaults to My data.
+  - **"My data" / "All data"** toggle sends `?mine=true`; backend returns records where `created_by = uid` OR the user appears in any `RecordTransition` for that record (`moved_by = uid`), i.e. records touched at any stage. Defaults to My data.
   - "Edit fields" button switches to the Stages tab (`onEditStage`) — columns are
     editable before any records exist.
   - `components/ui/` holds shadcn primitives (button, badge, table, input, select,
