@@ -206,7 +206,9 @@ string clears it) ·
 fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` ·
 constraints: `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` ·
 records: `GET/POST …/records`, `POST …/records/bulk` (bulk import; first stage must
-have exactly 1 field; body `{values:[…]}`; returns `{succeeded, failed:[{index,error}]}`),
+have ≥1 field; body `{values:[…]}` — one value per line when the stage has one field,
+CSV rows in field position order when multiple; multiselect/repeatable cells use `;`;
+returns `{succeeded, failed:[{index,error}]}`),
 `GET/DELETE …/records/{record}` (delete needs the `delete` perm, cascades values/keys/
 transitions), `GET/PUT …/records/{record}/values`,
 `GET …/records/{record}/history` (transitions with resolved user + stage names) ·
@@ -271,8 +273,9 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  the user can fix it — no orphan empty rows. After a successful create, the grid
  navigates to the last page so the new row is immediately visible.
    - **"Bulk Add"** button appears in the toolbar when the selected stage is the
-     first stage and has exactly one field. Opens `BulkImportModal`: textarea
-     (one entry per line), Import button with live line count, non-closable during
+     first stage and has at least one field. Opens `BulkImportModal`: textarea
+     (one entry per line for a single field; CSV rows when multiple fields — column
+     order hint shown in the modal), Import button with live line count, non-closable during
      import (backdrop + Escape blocked), blocked on backdrop/Escape if textarea has
      content. After import shows succeeded/failed summary; failed entries listed with
      1-based line number, original value, and error; "Edit failed entries" re-populates

@@ -140,7 +140,7 @@ export default function StageTimeline({
   const nextStage = orderedStages[selectedIndex + 1]
   const isFirstStage = selectedIndex === 0
   const firstStageFieldCount = (selectedStage.fields ?? []).length
-  const showBulkAdd = isFirstStage && firstStageFieldCount === 1
+  const showBulkAdd = isFirstStage && firstStageFieldCount > 0
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
@@ -1167,8 +1167,9 @@ function ActivityEntry({ transition: t }: { transition: RecordTransitionEntry })
   )
 }
 
-/** Modal for bulk-importing records into a single-field first stage.
- * Each non-empty line in the textarea becomes one record.
+/** Modal for bulk-importing records into the first stage.
+ * Each non-empty line becomes one record (one value per line for a single field;
+ * CSV rows when the stage has multiple fields).
  * - Cannot be dismissed while import is in progress.
  * - Backdrop click and Escape are blocked when the textarea has content.
  * - After import, displays per-line results; failed lines can be retried. */
@@ -1184,7 +1185,12 @@ function BulkImportModal({
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  const field = (stage.fields ?? [])[0]
+  const fields = useMemo(
+    () => [...(stage.fields ?? [])].sort((a, b) => a.position - b.position),
+    [stage.fields],
+  )
+  const isMultiField = fields.length > 1
+  const field = fields[0]
 
   type Phase = 'edit' | 'importing' | 'done'
   const [phase, setPhase] = useState<Phase>('edit')
@@ -1233,13 +1239,15 @@ function BulkImportModal({
 
   const handleRetryFailed = () => {
     if (!result) return
-    const failedLines = result.failed.map((f) => submittedLines[f.index]).filter(Boolean)
+    const failed = result.failed ?? []
+    const failedLines = failed.map((f) => submittedLines[f.index]).filter(Boolean)
     setText(failedLines.join('\n'))
     setResult(null)
     setPhase('edit')
   }
 
-  const allSucceeded = result && result.failed.length === 0
+  const failedEntries = result?.failed ?? []
+  const allSucceeded = result != null && failedEntries.length === 0
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !blockClose) onClose() }}>
@@ -1253,8 +1261,20 @@ function BulkImportModal({
           <DialogTitle>Bulk Add — {stage.name}</DialogTitle>
           {phase === 'edit' && (
             <DialogDescription>
-              Paste entries for <span className="font-medium text-foreground">{field?.label ?? 'the field'}</span>,
-              one per line. Each non-empty line creates a new record.
+              {isMultiField ? (
+                <>
+                  Paste CSV lines, one record per line. Each non-empty line creates a new record.
+                </>
+              ) : (
+                <>
+                  Paste entries for{' '}
+                  <span className="font-medium text-foreground">
+                    {field?.label ?? 'the field'}
+                    {field?.required && <span className="text-destructive">*</span>}
+                  </span>
+                  , one per line. Each non-empty line creates a new record.
+                </>
+              )}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -1262,9 +1282,30 @@ function BulkImportModal({
         {/* ---- Edit phase ---- */}
         {(phase === 'edit' || phase === 'importing') && (
           <div className="flex flex-col gap-2">
+            {phase === 'edit' && isMultiField && (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Column order: </span>
+                {fields.map((f, i) => (
+                  <span key={f.id}>
+                    {i > 0 && ', '}
+                    <span className="font-medium text-foreground">
+                      {f.label}
+                      {f.required && <span className="text-destructive">*</span>}
+                    </span>
+                  </span>
+                ))}
+                <p className="mt-1">
+                  Use semicolons within a cell for multiselect or repeatable fields.
+                </p>
+              </div>
+            )}
             <textarea
               className="min-h-48 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder={`One ${field?.label ?? 'value'} per line…`}
+              placeholder={
+                isMultiField
+                  ? `${fields.map((f) => f.label).join(', ')}\n(one CSV row per line…)`
+                  : `One ${field?.label ?? 'value'} per line…`
+              }
               value={text}
               onChange={(e) => setText(e.target.value)}
               disabled={phase === 'importing'}
@@ -1297,22 +1338,22 @@ function BulkImportModal({
                 : <AlertCircle className="mt-0.5 size-4 shrink-0" />}
               <span>
                 {result.succeeded > 0 && (
-                  <><strong>{result.succeeded}</strong> {result.succeeded === 1 ? 'entry' : 'entries'} added successfully{result.failed.length > 0 ? '; ' : '.'}</>
+                  <><strong>{result.succeeded}</strong> {result.succeeded === 1 ? 'entry' : 'entries'} added successfully{failedEntries.length > 0 ? '; ' : '.'}</>
                 )}
-                {result.failed.length > 0 && (
-                  <><strong>{result.failed.length}</strong> {result.failed.length === 1 ? 'entry' : 'entries'} failed.</>
+                {failedEntries.length > 0 && (
+                  <><strong>{failedEntries.length}</strong> {failedEntries.length === 1 ? 'entry' : 'entries'} failed.</>
                 )}
               </span>
             </div>
 
             {/* Failed entries list */}
-            {result.failed.length > 0 && (
+            {failedEntries.length > 0 && (
               <div className="flex flex-col gap-1.5 rounded-md border">
                 <div className="border-b bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground">
                   Failed entries
                 </div>
                 <ul className="max-h-48 overflow-y-auto divide-y">
-                  {result.failed.map((f) => (
+                  {failedEntries.map((f) => (
                     <li key={f.index} className="flex items-start gap-3 px-3 py-2 text-sm">
                       <span className="mt-0.5 shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-[11px] font-mono text-destructive">
                         #{f.index + 1}
@@ -1345,7 +1386,7 @@ function BulkImportModal({
           )}
           {phase === 'done' && (
             <>
-              {result && result.failed.length > 0 && (
+              {result && failedEntries.length > 0 && (
                 <Button variant="outline" onClick={handleRetryFailed}>
                   Edit failed entries
                 </Button>

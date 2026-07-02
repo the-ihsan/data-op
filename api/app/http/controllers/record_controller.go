@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"encoding/csv"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/goravel/framework/contracts/database/orm"
@@ -347,10 +349,13 @@ func (r *RecordController) History(ctx http.Context) http.Response {
 }
 
 // BulkImport creates one record per entry in the submitted values list, all
-// placed at the campaign's first stage. The first stage must have exactly one
-// field. Each empty/whitespace-only entry is silently skipped. The response
-// reports how many succeeded and, for those that failed, their 0-based index
-// in the submitted array together with the error reason.
+// placed at the campaign's first stage. The first stage must have at least one
+// field. Single-field stages treat each line as that field's value; multi-field
+// stages parse each line as CSV with columns in field position order (multiselect
+// and repeatable fields accept semicolon-separated values within a cell).
+// Each empty/whitespace-only entry is silently skipped. The response reports
+// how many succeeded and, for those that failed, their 0-based index in the
+// submitted array together with the error reason.
 func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 	campaign, resp := loadCampaign(ctx)
 	if resp != nil {
@@ -373,10 +378,9 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 	if err != nil {
 		return serverError(ctx, err)
 	}
-	if len(fields) != 1 {
-		return badRequest(ctx, "bulk import requires the first stage to have exactly one field")
+	if len(fields) == 0 {
+		return badRequest(ctx, "bulk import requires the first stage to have at least one field")
 	}
-	field := fields[0]
 
 	var body struct {
 		Values []string `json:"values"`
@@ -399,12 +403,18 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 		Index int    `json:"index"`
 		Error string `json:"error"`
 	}
-	var failed []FailedEntry
+	failed := make([]FailedEntry, 0)
 	succeeded := 0
 
 	for i, val := range body.Values {
 		val = strings.TrimSpace(val)
 		if val == "" {
+			continue
+		}
+
+		rawValues, parseErr := parseBulkImportLine(val, fields)
+		if parseErr != nil {
+			failed = append(failed, FailedEntry{Index: i, Error: parseErr.Error()})
 			continue
 		}
 
@@ -427,9 +437,11 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 			if err := tx.Create(&transition); err != nil {
 				return err
 			}
-			rawValues := map[string][]string{field.Key: {val}}
 			valuesByKey, err := services.StoreValues(tx, record.ID, firstStage.ID, fields, rawValues, firstStage.SanitizeEntry)
 			if err != nil {
+				return err
+			}
+			if err := services.ValidateRequired(fields, valuesByKey); err != nil {
 				return err
 			}
 			label, err := checker.Enforce(tx, record.ID, valuesByKey)
@@ -461,6 +473,57 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 		"succeeded": succeeded,
 		"failed":    failed,
 	})
+}
+
+// parseBulkImportLine converts one submitted line into field values keyed by field key.
+func parseBulkImportLine(line string, fields []models.StageField) (map[string][]string, error) {
+	if len(fields) == 1 {
+		val := strings.TrimSpace(line)
+		if val == "" {
+			return map[string][]string{}, nil
+		}
+		return map[string][]string{fields[0].Key: bulkImportCellEntries(fields[0], val)}, nil
+	}
+
+	r := csv.NewReader(strings.NewReader(line))
+	r.FieldsPerRecord = -1
+	r.LazyQuotes = true
+	cells, err := r.Read()
+	if err != nil {
+		return nil, fmt.Errorf("invalid CSV line: %s", err.Error())
+	}
+	if len(cells) > len(fields) {
+		return nil, fmt.Errorf("expected at most %d columns, got %d", len(fields), len(cells))
+	}
+	for len(cells) < len(fields) {
+		cells = append(cells, "")
+	}
+
+	raw := map[string][]string{}
+	for i, field := range fields {
+		cell := strings.TrimSpace(cells[i])
+		if cell == "" {
+			continue
+		}
+		raw[field.Key] = bulkImportCellEntries(field, cell)
+	}
+	return raw, nil
+}
+
+// bulkImportCellEntries splits a CSV cell into stored entries for one field.
+func bulkImportCellEntries(field models.StageField, cell string) []string {
+	if field.Type == models.FieldTypeMultiSelect || field.MaxCount != 1 {
+		parts := strings.Split(cell, ";")
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	return []string{cell}
 }
 
 // ensureNotLockedByOther blocks edits when another user holds the lock in a

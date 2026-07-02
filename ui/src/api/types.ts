@@ -141,7 +141,7 @@ export interface RecordHistory {
 
 export interface BulkImportResult {
   succeeded: number
-  failed: Array<{ index: number; error: string }>
+  failed?: Array<{ index: number; error: string }>
 }
 
 export interface Analytics {
