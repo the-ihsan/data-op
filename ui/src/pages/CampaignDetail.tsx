@@ -1,21 +1,26 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { campaignApi } from '../api/resources'
-import { TopbarPortal } from '../App'
-import DrawerNav from '../components/DrawerNav'
+import type { Campaign } from '../api/types'
+import CampaignNav from '../components/CampaignNav'
 import StageBuilder from '../components/StageBuilder'
 import Members from '../components/Members'
 import StageTimeline from '../components/StageTimeline'
 import AnalyticsPanel from '../components/AnalyticsPanel'
 import Settings from '../components/Settings'
 
-type Tab = 'records' | 'stages' | 'members' | 'analytics' | 'settings'
+export type CampaignOutletContext = {
+  campaign: Campaign
+  campaignId: number
+}
+
+export function useCampaignContext() {
+  return useOutletContext<CampaignOutletContext>()
+}
 
 export default function CampaignDetail() {
   const { id } = useParams()
   const campaignId = Number(id)
-  const [tab, setTab] = useState<Tab>('records')
 
   const { data: campaign, isLoading, error } = useQuery({
     queryKey: ['campaign', campaignId],
@@ -26,33 +31,60 @@ export default function CampaignDetail() {
   if (error) return <div className="error">{(error as Error).message}</div>
   if (!campaign) return null
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'records', label: 'Timeline' },
-    { key: 'stages', label: 'Stages & Fields' },
-    { key: 'members', label: 'Members' },
-    { key: 'analytics', label: 'Analytics' },
-    { key: 'settings', label: 'Settings' },
-  ]
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <CampaignNav campaign={campaign} />
+      <Outlet context={{ campaign, campaignId } satisfies CampaignOutletContext} />
+    </div>
+  )
+}
+
+export function CampaignTimeline() {
+  const { campaign } = useCampaignContext()
+  const navigate = useNavigate()
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <TopbarPortal>
-        <DrawerNav<Tab> campaign={campaign} tabs={tabs} tab={tab} onTabChange={setTab} />
-      </TopbarPortal>
+      <StageTimeline
+        campaign={campaign}
+        onAddFields={() => navigate(`/campaigns/${campaign.id}/stages`)}
+      />
+    </div>
+  )
+}
 
-      {tab === 'records' && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <StageTimeline campaign={campaign} onAddFields={() => setTab('stages')} />
-        </div>
-      )}
-      {tab !== 'records' && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {tab === 'stages' && <StageBuilder campaignId={campaignId} />}
-          {tab === 'members' && <Members campaignId={campaignId} />}
-          {tab === 'analytics' && <AnalyticsPanel campaignId={campaignId} />}
-          {tab === 'settings' && <Settings campaign={campaign} />}
-        </div>
-      )}
+export function CampaignStages() {
+  const { campaignId } = useCampaignContext()
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <StageBuilder campaignId={campaignId} />
+    </div>
+  )
+}
+
+export function CampaignMembers() {
+  const { campaignId } = useCampaignContext()
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <Members campaignId={campaignId} />
+    </div>
+  )
+}
+
+export function CampaignAnalytics() {
+  const { campaignId } = useCampaignContext()
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <AnalyticsPanel campaignId={campaignId} />
+    </div>
+  )
+}
+
+export function CampaignSettings() {
+  const { campaign } = useCampaignContext()
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <Settings campaign={campaign} />
     </div>
   )
 }

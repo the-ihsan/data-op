@@ -225,16 +225,15 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
 - `api/types.ts` — TS types + `parseOptions`/`parseFieldKeys` helpers.
 - `api/resources.ts` — typed endpoint wrappers grouped by resource.
 - `auth/AuthContext.tsx` — `useAuth()` (user/login/register/logout).
-- `App.tsx` — routes + `Protected` layout. The layout is **full width** (no
- `.container` on `main`) and exports `TopbarPortal`, which portals children into a
- slot in the topbar — CampaignDetail renders its back link, campaign name, badges
- and tab nav there to maximize vertical space for the grid. Below **1200px** (`drawer-nav`
- breakpoint) the topbar shows only the logo + `DrawerNav` menu trigger; campaign metadata
- and tabs move into a left **Sheet** drawer. `pages/`: Login,
- Campaigns, CampaignDetail (tabs: **Timeline**/stages/members/analytics/settings —
- the `records` tab key renders the timeline), RecordDetail (dynamic form + flow
- actions; inherited `prev_stage_key` fields render disabled). `components/`:
-  StageBuilder — pipeline-style stage builder (`components/stage-builder/`): horizontal **stage tabs**
+- `App.tsx` — routes + `Protected` layout. Topbar: brand + `UserMenu` (dropdown with
+  name/username + log out). Campaign routes are nested under `/campaigns/:id` with
+  `CampaignDetail` as layout (`CampaignNav` sub-header + `<Outlet>`). Sub-routes:
+  index → Timeline (`StageTimeline`), `stages`, `members`, `analytics`, `settings`.
+  Below **1200px** (`drawer-nav` breakpoint) campaign tab links move into a left
+  **Sheet**; desktop shows a horizontal nav row under the campaign header. `pages/`:
+  Login, Campaigns, CampaignDetail (layout + route segment components), RecordDetail
+  (dynamic form + flow actions; inherited `prev_stage_key` fields render disabled).
+  `components/`: `CampaignNav`, `UserMenu`, StageBuilder — pipeline-style stage builder (`components/stage-builder/`): horizontal **stage tabs**
   (numbered pills with field counts) + **Add stage** button on the right; selected stage shows a card
   editor with field list (badges for rules, inline edit/delete), **Add field** panel
   (default value, allow-multiple checkbox with max-count only when checked, inherit-from-prev
