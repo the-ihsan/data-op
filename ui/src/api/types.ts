@@ -106,6 +106,30 @@ export interface PaginatedRecords {
   per_page: number
 }
 
+export interface TransitionUser {
+  id: number
+  name: string
+  username: string
+}
+
+export interface TransitionStage {
+  id: number
+  name: string
+}
+
+export interface RecordTransitionEntry {
+  id: number
+  from_stage: TransitionStage | null
+  to_stage: TransitionStage
+  by: TransitionUser
+  note: string
+  created_at: string
+}
+
+export interface RecordHistory {
+  transitions: RecordTransitionEntry[]
+}
+
 export interface Analytics {
   total_records: number
   by_stage: { stage_id: number; name: string; position: number; count: number }[]

@@ -129,7 +129,8 @@ stages: `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` ·
 fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` ·
 constraints: `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` ·
 records: `GET/POST …/records`, `GET/DELETE …/records/{record}` (delete needs the
-`delete` perm, cascades values/keys/transitions), `GET/PUT …/records/{record}/values` ·
+`delete` perm, cascades values/keys/transitions), `GET/PUT …/records/{record}/values`,
+`GET …/records/{record}/history` (transitions with resolved user + stage names) ·
   - `GET /records` supports `?stage=`, `?status=`, `?mine=true`, `?page=` (default 1),
     `?per_page=` (default 50, max 200). Returns `{ records, total, page, per_page }`;
     ordered `id ASC` so new entries appear last. ·
@@ -161,10 +162,19 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  - **Repeatable fields** (`max_count` 0 or > 1, scalar types) use `MultiEntryCell`: a
  popover with one input per entry plus add/remove; saves when the popover closes.
  - **Row actions** open a **context menu beside the cursor** (right-click anywhere on
- the row, or click the row's trailing "…" button): mark/unmark processing, move to
- next stage / finish, and **Delete** with confirm (also on finished rows). Rendered
- via `createPortal` + `position: fixed`, viewport-clamped; closes on outside click /
- Escape / scroll; failed actions keep it open with the error inline (`RowActionsMenu`).
+ the row, or click the row's trailing "…" button): **Details** (opens `RecordDetailsModal`),
+ mark/unmark processing, move to next stage / finish, and **Delete** with confirm (also
+ on finished rows). Rendered via `createPortal` + `position: fixed`, viewport-clamped;
+ closes on outside click / Escape / scroll; failed actions keep it open with the error
+ inline (`RowActionsMenu`).
+ - **RecordDetailsModal** — shadcn `Dialog` showing all collected data for a record
+ grouped by stage plus a full **Activity** trail. Stage progress indicator at the top
+ (past=green, current=primary, future=secondary). Only stages with saved values are
+ shown. Fields display label/value pairs; boolean → Yes/No with icon; dates →
+ `toLocaleDateString()`; multi-entry fields → one line each. Activity section fetches
+ `GET /records/{record}/history` (loaded lazily when the modal opens via React Query
+ key `['record-history', campaignId, recordId]`) and renders a vertical timeline of
+ transitions: user name + username, stage move label, optional note, timestamp.
  - A permanent **empty add-row** at the bottom of the **first** stage; committing any
  cell creates a record (`recordApi.create`) then saves the values. If the value save
  fails the just-created record is **rolled back** (deleted) and the draft is kept so

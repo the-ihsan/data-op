@@ -245,6 +245,104 @@ func (r *RecordController) Advance(ctx http.Context) http.Response {
 	return ok(ctx, record)
 }
 
+// History returns the stage-transition audit trail for a record with resolved
+// user and stage names, ordered oldest-first.
+func (r *RecordController) History(ctx http.Context) http.Response {
+	record, campaign, resp := loadRecord(ctx)
+	if resp != nil {
+		return resp
+	}
+	if !services.CanView(currentUserID(ctx), campaign) {
+		return forbidden(ctx, "you do not have access to this campaign")
+	}
+
+	var transitions []models.RecordTransition
+	if err := facades.Orm().Query().Where("record_id", record.ID).Order("created_at ASC").Get(&transitions); err != nil {
+		return serverError(ctx, err)
+	}
+
+	// Collect unique user IDs and stage IDs for bulk resolution.
+	userIDSet := map[uint]bool{}
+	stageIDSet := map[uint]bool{}
+	for _, t := range transitions {
+		userIDSet[t.MovedBy] = true
+		if t.FromStageID != nil {
+			stageIDSet[*t.FromStageID] = true
+		}
+		stageIDSet[t.ToStageID] = true
+	}
+
+	userMap := map[uint]models.User{}
+	if len(userIDSet) > 0 {
+		uids := make([]any, 0, len(userIDSet))
+		for id := range userIDSet {
+			uids = append(uids, id)
+		}
+		var users []models.User
+		if err := facades.Orm().Query().WhereIn("id", uids).Get(&users); err != nil {
+			return serverError(ctx, err)
+		}
+		for _, u := range users {
+			userMap[u.ID] = u
+		}
+	}
+
+	stageMap := map[uint]models.Stage{}
+	if len(stageIDSet) > 0 {
+		sids := make([]any, 0, len(stageIDSet))
+		for id := range stageIDSet {
+			sids = append(sids, id)
+		}
+		var stages []models.Stage
+		if err := facades.Orm().Query().WhereIn("id", sids).Get(&stages); err != nil {
+			return serverError(ctx, err)
+		}
+		for _, s := range stages {
+			stageMap[s.ID] = s
+		}
+	}
+
+	type UserInfo struct {
+		ID       uint   `json:"id"`
+		Name     string `json:"name"`
+		Username string `json:"username"`
+	}
+	type StageInfo struct {
+		ID   uint   `json:"id"`
+		Name string `json:"name"`
+	}
+	type Entry struct {
+		ID        uint       `json:"id"`
+		FromStage *StageInfo `json:"from_stage"`
+		ToStage   StageInfo  `json:"to_stage"`
+		By        UserInfo   `json:"by"`
+		Note      string     `json:"note"`
+		CreatedAt string     `json:"created_at"`
+	}
+
+	entries := make([]Entry, 0, len(transitions))
+	for _, t := range transitions {
+		u := userMap[t.MovedBy]
+		toS := stageMap[t.ToStageID]
+		e := Entry{
+			ID:      t.ID,
+			ToStage: StageInfo{ID: toS.ID, Name: toS.Name},
+			By:      UserInfo{ID: u.ID, Name: u.Name, Username: u.Username},
+			Note:    t.Note,
+		}
+		if t.CreatedAt != nil {
+			e.CreatedAt = t.CreatedAt.ToDateTimeString()
+		}
+		if t.FromStageID != nil {
+			s := stageMap[*t.FromStageID]
+			e.FromStage = &StageInfo{ID: s.ID, Name: s.Name}
+		}
+		entries = append(entries, e)
+	}
+
+	return ok(ctx, http.Json{"transitions": entries})
+}
+
 // ensureNotLockedByOther blocks edits when another user holds the lock in a
 // non-concurrent campaign.
 func ensureNotLockedByOther(ctx http.Context, campaign *models.Campaign, record *models.Record, uid uint) http.Response {

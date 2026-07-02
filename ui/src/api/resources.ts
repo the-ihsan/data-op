@@ -5,6 +5,7 @@ import type {
   CampaignMember,
   PaginatedRecords,
   RecordFormData,
+  RecordHistory,
   RecordRow,
   Stage,
   StageField,
@@ -109,6 +110,8 @@ export const recordApi = {
     unwrap<RecordRow>(api.post(`/campaigns/${campaignId}/records/${recordId}/release`, {})),
   advance: (campaignId: number, recordId: number, note?: string) =>
     unwrap<RecordRow>(api.post(`/campaigns/${campaignId}/records/${recordId}/advance`, { note })),
+  history: (campaignId: number, recordId: number) =>
+    unwrap<RecordHistory>(api.get(`/campaigns/${campaignId}/records/${recordId}/history`)),
 }
 
 // --- Analytics ---
