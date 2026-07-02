@@ -65,7 +65,7 @@ stale compiled backend binary left listening on another port answers with 404s f
 routes added later — if a registered route 404s, check for and kill old `goravel`/
 `main.exe` processes (`ss -tlnp | grep 300`).
 
-**Demo login (after seed):** `alice@dataop.dev` / `password` — owns the "Customer
+**Demo login (after seed):** username `alice` / password `password` — owns the "Customer
 Feedback" campaign (Intake → Triage → Resolution, with an inherited `email` field and
 a unique `email` at Intake).
 
@@ -130,6 +130,9 @@ fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` ·
 constraints: `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` ·
 records: `GET/POST …/records`, `GET/DELETE …/records/{record}` (delete needs the
 `delete` perm, cascades values/keys/transitions), `GET/PUT …/records/{record}/values` ·
+  - `GET /records` supports `?stage=`, `?status=`, `?mine=true`, `?page=` (default 1),
+    `?per_page=` (default 50, max 200). Returns `{ records, total, page, per_page }`;
+    ordered `id ASC` so new entries appear last. ·
 flow: `POST …/records/{record}/{processing|release|advance}` ·
 analytics: `GET …/campaigns/{campaign}/analytics`.
 
@@ -165,8 +168,9 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  - A permanent **empty add-row** at the bottom of the **first** stage; committing any
  cell creates a record (`recordApi.create`) then saves the values. If the value save
  fails the just-created record is **rolled back** (deleted) and the draft is kept so
- the user can fix it — no orphan empty rows.
-  - **"My data" / "All data"** toggle filters by `created_by`; defaults to My data.
+ the user can fix it — no orphan empty rows. After a successful create, the grid
+ navigates to the last page so the new row is immediately visible.
+  - **"My data" / "All data"** toggle filters by `created_by` (`?mine=true` sent to backend); defaults to My data.
   - "Edit fields" button switches to the Stages tab (`onEditStage`) — columns are
     editable before any records exist.
   - `components/ui/` holds shadcn primitives (button, badge, table, input, select,
@@ -190,6 +194,10 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   a conflict returns `ErrUniquenessConflict` to force rollback → controller responds 409.
 - Testing tip: when shell-scripting curl with a bearer token, **quote the whole header**
  (`-H "Authorization: Bearer $TOK"`) — an unquoted var splits on the space.
+ - **StageTimeline pagination**: `StageGrid` fetches records per-stage with `?stage=`,
+ `?mine=`, `?page=`, `?per_page=50`. Toolbar badge shows live total via `onTotalChange`
+ callback. Stage pills no longer show per-stage counts. Pagination footer appears when
+ `totalPages > 1`. `PER_PAGE = 50` constant at module level.
 - `StageTimeline.tsx` once contained **corrupted bytes** (NUL / control chars where
  `…`, `—`, `“”` and a lock glyph should be), which made ripgrep treat the file as
  binary and silently return no matches. If a grep on a UI file unexpectedly finds

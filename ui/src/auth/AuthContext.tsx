@@ -6,8 +6,8 @@ import type { User } from '../api/types'
 interface AuthState {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<void>
+  register: (name: string, username: string, password: string) => Promise<void>
   logout: () => void
 }
 
@@ -29,14 +29,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const login = async (email: string, password: string) => {
-    const { user, token } = await authApi.login({ email, password })
+  const login = async (username: string, password: string) => {
+    const { user, token } = await authApi.login({ username, password })
     setToken(token)
     setUser(user)
   }
 
-  const register = async (name: string, email: string, password: string) => {
-    const { user, token } = await authApi.register({ name, email, password })
+  const register = async (name: string, username: string, password: string) => {
+    const { user, token } = await authApi.register({ name, username, password })
     setToken(token)
     setUser(user)
   }

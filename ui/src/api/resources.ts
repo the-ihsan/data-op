@@ -3,6 +3,7 @@ import type {
   Analytics,
   Campaign,
   CampaignMember,
+  PaginatedRecords,
   RecordFormData,
   RecordRow,
   Stage,
@@ -13,9 +14,9 @@ import type {
 
 // --- Auth ---
 export const authApi = {
-  register: (body: { name: string; email: string; password: string }) =>
+  register: (body: { name: string; username: string; password: string }) =>
     unwrap<{ user: User; token: string }>(api.post('/auth/register', body)),
-  login: (body: { email: string; password: string }) =>
+  login: (body: { username: string; password: string }) =>
     unwrap<{ user: User; token: string }>(api.post('/auth/login', body)),
   me: () => unwrap<User>(api.get('/auth/me')),
 }
@@ -34,7 +35,7 @@ export const campaignApi = {
 export const memberApi = {
   list: (campaignId: number) =>
     unwrap<CampaignMember[]>(api.get(`/campaigns/${campaignId}/members`)),
-  add: (campaignId: number, body: Partial<CampaignMember> & { email: string }) =>
+  add: (campaignId: number, body: Partial<CampaignMember> & { username: string }) =>
     unwrap<CampaignMember>(api.post(`/campaigns/${campaignId}/members`, body)),
   update: (campaignId: number, memberId: number, body: Partial<CampaignMember>) =>
     unwrap<CampaignMember>(api.put(`/campaigns/${campaignId}/members/${memberId}`, body)),
@@ -88,8 +89,10 @@ export const constraintApi = {
 
 // --- Records & data flow ---
 export const recordApi = {
-  list: (campaignId: number, params?: { stage?: number; status?: string }) =>
-    unwrap<RecordRow[]>(api.get(`/campaigns/${campaignId}/records`, { params })),
+  list: (
+    campaignId: number,
+    params?: { stage?: number; status?: string; mine?: boolean; page?: number; per_page?: number },
+  ) => unwrap<PaginatedRecords>(api.get(`/campaigns/${campaignId}/records`, { params })),
   create: (campaignId: number) =>
     unwrap<RecordRow>(api.post(`/campaigns/${campaignId}/records`, {})),
   remove: (campaignId: number, recordId: number) =>

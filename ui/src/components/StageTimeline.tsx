@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -11,6 +12,7 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Check,
+  ChevronLeft,
   ChevronRight,
   Lock,
   MoreHorizontal,
@@ -75,17 +77,13 @@ export default function StageTimeline({
   campaign: Campaign
   onEditStage: () => void
 }) {
-  const { user } = useAuth()
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null)
   const [mineOnly, setMineOnly] = useState(true)
+  const [selectedTotal, setSelectedTotal] = useState(0)
 
   const { data: stages } = useQuery({
     queryKey: ['stages', campaign.id],
     queryFn: () => stageApi.list(campaign.id),
-  })
-  const { data: records, isLoading } = useQuery({
-    queryKey: ['records', campaign.id],
-    queryFn: () => recordApi.list(campaign.id),
   })
 
   const orderedStages = useMemo(
@@ -100,19 +98,16 @@ export default function StageTimeline({
     }
   }, [orderedStages, selectedStageId])
 
-  if (!stages) return <p className="muted">Loading…</p>
+  const handleTotalChange = useCallback((total: number) => setSelectedTotal(total), [])
+
+  if (!stages) return <p className="muted">Loading</p>
   if (orderedStages.length === 0) {
     return (
       <div className="notice">
-        Define at least one stage before collecting records (see “Stages &amp; Fields”).
+        Define at least one stage before collecting records (see “Stages & Fields”).
       </div>
     )
   }
-
-  const visible = (all: RecordRow[]): RecordRow[] =>
-    mineOnly ? all.filter((r) => r.created_by === user?.id) : all
-  const atStage = (stageId: number) =>
-    visible((records ?? []).filter((r) => r.current_stage_id === stageId))
 
   const selectedStage = orderedStages.find((s) => s.id === selectedStageId) ?? orderedStages[0]
   const selectedIndex = orderedStages.findIndex((s) => s.id === selectedStage.id)
@@ -124,32 +119,26 @@ export default function StageTimeline({
       <div className="flex shrink-0 items-center overflow-x-auto pb-2">
         {orderedStages.map((stage, i) => {
           const active = stage.id === selectedStage.id
-          const count = atStage(stage.id).length
           return (
             <div key={stage.id} className="flex items-center">
               <button
                 onClick={() => setSelectedStageId(stage.id)}
                 className={cn(
-                  'flex min-w-[9rem] flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left transition-colors',
+                  'flex min-w-36 items-center gap-2 rounded-lg border px-4 py-3 text-left transition-colors',
                   active
                     ? 'border-primary bg-accent shadow-sm'
                     : 'border-border bg-card hover:border-muted-foreground/40',
                 )}
               >
-                <div className="flex w-full items-center gap-2">
-                  <span
-                    className={cn(
-                      'flex size-6 items-center justify-center rounded-full text-xs font-semibold',
-                      active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground',
-                    )}
-                  >
-                    {i + 1}
-                  </span>
-                  <span className="truncate text-sm font-semibold text-foreground">{stage.name}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {count} record{count === 1 ? '' : 's'}
+                <span
+                  className={cn(
+                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                    active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground',
+                  )}
+                >
+                  {i + 1}
                 </span>
+                <span className="truncate text-sm font-semibold text-foreground">{stage.name}</span>
               </button>
               {i < orderedStages.length - 1 && (
                 <ChevronRight className="mx-1 size-5 shrink-0 text-muted-foreground/50" />
@@ -162,7 +151,7 @@ export default function StageTimeline({
       {/* Grid toolbar */}
       <div className="flex shrink-0 flex-wrap items-center gap-3">
         <h3 className="m-0 text-base font-semibold text-foreground">{selectedStage.name}</h3>
-        <Badge variant="secondary">{atStage(selectedStage.id).length}</Badge>
+        <Badge variant="secondary">{selectedTotal}</Badge>
         <div className="flex-1" />
         <div className="inline-flex overflow-hidden rounded-md border">
           <button
@@ -188,35 +177,67 @@ export default function StageTimeline({
         stage={selectedStage}
         nextStage={nextStage}
         isFirstStage={selectedIndex === 0}
-        records={atStage(selectedStage.id)}
-        loading={isLoading}
+        mineOnly={mineOnly}
+        onTotalChange={handleTotalChange}
         onEditStage={onEditStage}
       />
     </div>
   )
 }
 
+const PER_PAGE = 50
+
 function StageGrid({
   campaign,
   stage,
   nextStage,
   isFirstStage,
-  records,
-  loading,
+  mineOnly,
+  onTotalChange,
   onEditStage,
 }: {
   campaign: Campaign
   stage: Stage
   nextStage?: Stage
   isFirstStage: boolean
-  records: RecordRow[]
-  loading: boolean
+  mineOnly: boolean
+  onTotalChange: (total: number) => void
   onEditStage: () => void
 }) {
+  const [page, setPage] = useState(1)
+
+  // Reset to page 1 whenever the viewed stage or mine-filter changes.
+  useEffect(() => { setPage(1) }, [stage.id, mineOnly])
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['records', campaign.id, stage.id, mineOnly, page],
+    queryFn: () =>
+      recordApi.list(campaign.id, {
+        stage: stage.id,
+        mine: mineOnly || undefined,
+        page,
+        per_page: PER_PAGE,
+      }),
+    placeholderData: (prev) => prev,
+  })
+
+  const records = data?.records ?? []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+
+  // Keep the toolbar badge in sync with the live total.
+  useEffect(() => { onTotalChange(total) }, [total, onTotalChange])
+
   const fields = useMemo(
     () => [...(stage.fields ?? [])].sort((a, b) => a.position - b.position),
     [stage.fields],
   )
+
+  // Called by DraftRow on successful record creation; navigates to the last page
+  // so the new row is immediately visible above the draft row.
+  const gotoLastPage = useCallback(() => {
+    setPage(Math.max(1, Math.ceil((total + 1) / PER_PAGE)))
+  }, [total])
 
   if (fields.length === 0) {
     return (
@@ -260,18 +281,48 @@ function StageGrid({
               />
             ))}
 
-            {isFirstStage && <DraftRow campaign={campaign} fields={fields} />}
+            {isFirstStage && <DraftRow campaign={campaign} fields={fields} onCreated={gotoLastPage} />}
 
             {records.length === 0 && !isFirstStage && (
               <TableRow>
                 <TableCell colSpan={fields.length + 3} className="py-6 text-center text-sm text-muted-foreground">
-                  {loading ? 'Loading…' : 'No records at this stage yet.'}
+                  {isLoading ? 'Loading' : 'No records at this stage yet.'}
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+
+      {/* Pagination footer — only rendered when there is more than one page */}
+      {totalPages > 1 && (
+        <div className="flex shrink-0 items-center justify-between border-t px-4 py-2 text-xs text-muted-foreground">
+          <span>
+            {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} of {total}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="flex size-7 items-center justify-center rounded border hover:bg-muted disabled:opacity-40"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <span className="px-2 tabular-nums">
+              {page} / {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="flex size-7 items-center justify-center rounded border hover:bg-muted disabled:opacity-40"
+              aria-label="Next page"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -390,9 +441,11 @@ function GridRow({
 function DraftRow({
   campaign,
   fields,
+  onCreated,
 }: {
   campaign: Campaign
   fields: StageField[]
+  onCreated: () => void
 }) {
   const qc = useQueryClient()
   const [local, setLocal] = useState<CellValues>({})
@@ -413,6 +466,7 @@ function DraftRow({
     onSuccess: () => {
       setLocal({})
       setError(null)
+      onCreated()
       qc.invalidateQueries({ queryKey: ['records', campaign.id] })
     },
     onError: (e) => setError((e as Error).message),
@@ -435,7 +489,7 @@ function DraftRow({
           <GridCell
             field={f}
             value={local[f.key] ?? []}
-            placeholder="New…"
+            placeholder="New"
             onChange={(arr, doCommit) => {
               const next = { ...local, [f.key]: arr }
               setLocal(next)
@@ -446,7 +500,7 @@ function DraftRow({
         </TableCell>
       ))}
       <TableCell className="text-xs text-muted-foreground">
-        {create.isPending ? 'Adding…' : 'New'}
+        {create.isPending ? 'Adding' : 'New'}
         {error && <div className="mt-1 text-[11px] text-destructive">{error}</div>}
       </TableCell>
       <TableCell />
@@ -813,4 +867,3 @@ function RowActionsMenu({
     document.body,
   )
 }
-

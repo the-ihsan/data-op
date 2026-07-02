@@ -7,7 +7,8 @@ import (
 type User struct {
 	orm.Model
 	Name     string `json:"name"`
-	Email    string `json:"email" gorm:"uniqueIndex"`
+	Username string `json:"username" gorm:"uniqueIndex"`
+	Email    string `json:"email"`
 	Password string `json:"-"`
 	orm.SoftDeletes
 }

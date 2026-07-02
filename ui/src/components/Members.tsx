@@ -11,14 +11,14 @@ export default function Members({ campaignId }: { campaignId: number }) {
   })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['members', campaignId] })
 
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [role, setRole] = useState<Role>('member')
   const [perms, setPerms] = useState({ can_add: true, can_edit: true, can_delete: false })
 
   const add = useMutation({
-    mutationFn: () => memberApi.add(campaignId, { email, role, ...perms }),
+    mutationFn: () => memberApi.add(campaignId, { username, role, ...perms }),
     onSuccess: () => {
-      setEmail('')
+      setUsername('')
       invalidate()
     },
   })
@@ -45,8 +45,8 @@ export default function Members({ campaignId }: { campaignId: number }) {
         <h3>Add member</h3>
         <div className="row wrap">
           <div className="field" style={{ flex: 2, minWidth: 180 }}>
-            <label>User email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
+            <label>Username</label>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
           </div>
           <div className="field" style={{ width: 130 }}>
             <label>Role</label>
@@ -67,7 +67,7 @@ export default function Members({ campaignId }: { campaignId: number }) {
             <input type="checkbox" checked={perms.can_delete} onChange={(e) => setPerms({ ...perms, can_delete: e.target.checked })} /> Delete
           </label>
           <div className="spacer" />
-          <button className="btn primary" disabled={!email.trim()} onClick={() => add.mutate()}>
+          <button className="btn primary" disabled={!username.trim()} onClick={() => add.mutate()}>
             Add member
           </button>
         </div>
@@ -93,7 +93,7 @@ export default function Members({ campaignId }: { campaignId: number }) {
                   {m.user?.name ?? `#${m.user_id}`}
                   <br />
                   <span className="muted" style={{ fontSize: '0.8rem' }}>
-                    {m.user?.email}
+                    @{m.user?.username}
                   </span>
                 </td>
                 <td>

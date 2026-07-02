@@ -17,7 +17,7 @@ func NewCampaignMemberController() *CampaignMemberController {
 }
 
 type memberRequest struct {
-	Email     string `json:"email"`
+	Username  string `json:"username"`
 	Role      string `json:"role"`
 	CanAdd    bool   `json:"can_add"`
 	CanEdit   bool   `json:"can_edit"`
@@ -67,17 +67,17 @@ func (r *CampaignMemberController) Store(ctx http.Context) http.Response {
 	if err := ctx.Request().Bind(&req); err != nil {
 		return badRequest(ctx, "invalid request body")
 	}
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-	if req.Email == "" {
-		return badRequest(ctx, "email is required")
+	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+	if req.Username == "" {
+		return badRequest(ctx, "username is required")
 	}
 
 	var user models.User
-	if err := facades.Orm().Query().Where("email", req.Email).First(&user); err != nil {
+	if err := facades.Orm().Query().Where("username", req.Username).First(&user); err != nil {
 		return serverError(ctx, err)
 	}
 	if user.ID == 0 {
-		return notFound(ctx, "no user with that email")
+		return notFound(ctx, "no user with that username")
 	}
 
 	var existing models.CampaignMember

@@ -1,7 +1,8 @@
 export interface User {
   id: number
   name: string
-  email: string
+  username: string
+  email?: string
 }
 
 export type Visibility = 'public' | 'private'
@@ -96,6 +97,13 @@ export interface RecordFormData {
   stage: Stage
   fields: StageField[]
   values: Record<string, string[]>
+}
+
+export interface PaginatedRecords {
+  records: RecordRow[]
+  total: number
+  page: number
+  per_page: number
 }
 
 export interface Analytics {

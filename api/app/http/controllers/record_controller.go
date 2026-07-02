@@ -15,29 +15,63 @@ func NewRecordController() *RecordController {
 	return &RecordController{}
 }
 
-// Index lists records for a campaign, optionally filtered by ?stage= and ?status=.
+// Index lists records for a campaign with pagination.
+// Query params: stage, status, mine (true/false), page (default 1), per_page (default 50, max 200).
+// Returns { records, total, page, per_page }; records are ordered id ASC so new entries appear last.
 func (r *RecordController) Index(ctx http.Context) http.Response {
 	campaign, resp := loadCampaign(ctx)
 	if resp != nil {
 		return resp
 	}
-	if !services.CanView(currentUserID(ctx), campaign) {
+	uid := currentUserID(ctx)
+	if !services.CanView(uid, campaign) {
 		return forbidden(ctx, "you do not have access to this campaign")
 	}
 
-	query := facades.Orm().Query().Where("campaign_id", campaign.ID)
-	if stageID := ctx.Request().QueryInt("stage"); stageID > 0 {
-		query = query.Where("current_stage_id", stageID)
-	}
-	if status := ctx.Request().Query("status"); status != "" {
-		query = query.Where("status", status)
+	applyFilters := func(q orm.Query) orm.Query {
+		q = q.Where("campaign_id", campaign.ID)
+		if stageID := ctx.Request().QueryInt("stage"); stageID > 0 {
+			q = q.Where("current_stage_id", stageID)
+		}
+		if status := ctx.Request().Query("status"); status != "" {
+			q = q.Where("status", status)
+		}
+		if ctx.Request().Query("mine") == "true" {
+			q = q.Where("created_by", uid)
+		}
+		return q
 	}
 
-	var records []models.Record
-	if err := query.With("Values").Order("updated_at DESC").Get(&records); err != nil {
+	var total int64
+	total, err := applyFilters(facades.Orm().Query().Model(&models.Record{})).Count()
+	if err != nil {
 		return serverError(ctx, err)
 	}
-	return ok(ctx, records)
+
+	page := ctx.Request().QueryInt("page")
+	if page < 1 {
+		page = 1
+	}
+	perPage := ctx.Request().QueryInt("per_page")
+	if perPage < 1 {
+		perPage = 50
+	}
+	if perPage > 200 {
+		perPage = 200
+	}
+	offset := (page - 1) * perPage
+
+	var records []models.Record
+	if err := applyFilters(facades.Orm().Query()).With("Values").Order("id ASC").Offset(offset).Limit(perPage).Get(&records); err != nil {
+		return serverError(ctx, err)
+	}
+
+	return ok(ctx, http.Json{
+		"records":  records,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
 }
 
 // Show returns a single record with its values.

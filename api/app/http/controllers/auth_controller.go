@@ -17,12 +17,12 @@ func NewAuthController() *AuthController {
 
 type registerRequest struct {
 	Name     string `json:"name"`
-	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
 type loginRequest struct {
-	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -32,17 +32,17 @@ func (r *AuthController) Register(ctx http.Context) http.Response {
 		return badRequest(ctx, "invalid request body")
 	}
 	req.Name = strings.TrimSpace(req.Name)
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-	if req.Name == "" || req.Email == "" || len(req.Password) < 6 {
-		return badRequest(ctx, "name, email and a password of at least 6 characters are required")
+	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+	if req.Name == "" || req.Username == "" || len(req.Password) < 6 {
+		return badRequest(ctx, "name, username and a password of at least 6 characters are required")
 	}
 
 	var existing models.User
-	if err := facades.Orm().Query().Where("email", req.Email).First(&existing); err != nil {
+	if err := facades.Orm().Query().Where("username", req.Username).First(&existing); err != nil {
 		return serverError(ctx, err)
 	}
 	if existing.ID != 0 {
-		return conflict(ctx, "email already registered")
+		return conflict(ctx, "username already taken")
 	}
 
 	hashed, err := facades.Hash().Make(req.Password)
@@ -50,7 +50,7 @@ func (r *AuthController) Register(ctx http.Context) http.Response {
 		return serverError(ctx, err)
 	}
 
-	user := models.User{Name: req.Name, Email: req.Email, Password: hashed}
+	user := models.User{Name: req.Name, Username: req.Username, Password: hashed}
 	if err := facades.Orm().Query().Create(&user); err != nil {
 		return serverError(ctx, err)
 	}
@@ -68,13 +68,13 @@ func (r *AuthController) Login(ctx http.Context) http.Response {
 	if err := ctx.Request().Bind(&req); err != nil {
 		return badRequest(ctx, "invalid request body")
 	}
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-	if req.Email == "" || req.Password == "" {
-		return badRequest(ctx, "email and password are required")
+	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+	if req.Username == "" || req.Password == "" {
+		return badRequest(ctx, "username and password are required")
 	}
 
 	var user models.User
-	if err := facades.Orm().Query().Where("email", req.Email).First(&user); err != nil {
+	if err := facades.Orm().Query().Where("username", req.Username).First(&user); err != nil {
 		return serverError(ctx, err)
 	}
 	if user.ID == 0 || !facades.Hash().Check(req.Password, user.Password) {

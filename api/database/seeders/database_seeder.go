@@ -95,7 +95,7 @@ func (s *DatabaseSeeder) Run() error {
 
 func (s *DatabaseSeeder) ensureUser() (*models.User, error) {
 	var user models.User
-	if err := facades.Orm().Query().Where("email", "alice@dataop.dev").First(&user); err != nil {
+	if err := facades.Orm().Query().Where("username", "alice").First(&user); err != nil {
 		return nil, err
 	}
 	if user.ID != 0 {
@@ -105,7 +105,7 @@ func (s *DatabaseSeeder) ensureUser() (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	user = models.User{Name: "Alice Demo", Email: "alice@dataop.dev", Password: hashed}
+	user = models.User{Name: "Alice Demo", Username: "alice", Password: hashed}
 	if err := facades.Orm().Query().Create(&user); err != nil {
 		return nil, err
 	}

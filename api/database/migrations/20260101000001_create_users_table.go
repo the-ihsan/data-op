@@ -19,11 +19,12 @@ func (r *M20260101000001CreateUsersTable) Up() error {
 	return facades.Schema().Create("users", func(table schema.Blueprint) {
 		table.ID()
 		table.String("name")
-		table.String("email")
+		table.String("username")
+		table.String("email").Nullable()
 		table.String("password")
 		table.Timestamps()
 		table.SoftDeletes()
-		table.Unique("email")
+		table.Unique("username")
 	})
 }
 

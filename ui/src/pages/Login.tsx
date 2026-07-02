@@ -7,7 +7,7 @@ export default function Login() {
   const navigate = useNavigate()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -21,8 +21,8 @@ export default function Login() {
     setError('')
     setBusy(true)
     try {
-      if (mode === 'login') await login(email, password)
-      else await register(name, email, password)
+      if (mode === 'login') await login(username, password)
+      else await register(name, username, password)
       navigate('/', { replace: true })
     } catch (err) {
       setError((err as Error).message)
@@ -57,8 +57,8 @@ export default function Login() {
           </div>
         )}
         <div className="field">
-          <label>Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <label>Username</label>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="username" />
         </div>
         <div className="field">
           <label>Password</label>
