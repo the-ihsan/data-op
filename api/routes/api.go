@@ -62,6 +62,7 @@ func Api() {
 		router.Get("campaigns/{campaign}/records", records.Index)
 		router.Post("campaigns/{campaign}/records", records.Store)
 		router.Get("campaigns/{campaign}/records/{record}", records.Show)
+		router.Delete("campaigns/{campaign}/records/{record}", records.Destroy)
 		router.Get("campaigns/{campaign}/records/{record}/values", values.Index)
 		router.Put("campaigns/{campaign}/records/{record}/values", values.Update)
 		router.Post("campaigns/{campaign}/records/{record}/processing", records.MarkProcessing)

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/contracts/http"
 	"github.com/goravel/framework/facades"
 
@@ -89,6 +90,39 @@ func (r *RecordController) Store(ctx http.Context) http.Response {
 		return serverError(ctx, err)
 	}
 	return created(ctx, record)
+}
+
+// Destroy deletes a record together with its values, uniqueness keys and history.
+func (r *RecordController) Destroy(ctx http.Context) http.Response {
+	record, campaign, resp := loadRecord(ctx)
+	if resp != nil {
+		return resp
+	}
+	uid := currentUserID(ctx)
+	if _, err := services.Authorize(uid, campaign.ID, services.PermDelete); err != nil {
+		return forbidden(ctx, "you do not have permission to delete records")
+	}
+	if resp := ensureNotLockedByOther(ctx, campaign, record, uid); resp != nil {
+		return resp
+	}
+
+	txErr := facades.Orm().Transaction(func(tx orm.Query) error {
+		if _, err := tx.Where("record_id", record.ID).Delete(&models.RecordValue{}); err != nil {
+			return err
+		}
+		if _, err := tx.Where("record_id", record.ID).Delete(&models.RecordStageKey{}); err != nil {
+			return err
+		}
+		if _, err := tx.Where("record_id", record.ID).Delete(&models.RecordTransition{}); err != nil {
+			return err
+		}
+		_, err := tx.Delete(record)
+		return err
+	})
+	if txErr != nil {
+		return serverError(ctx, txErr)
+	}
+	return ok(ctx, http.Json{"message": "record deleted"})
 }
 
 // MarkProcessing marks a record as being worked on. When the campaign disallows

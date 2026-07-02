@@ -6,6 +6,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/goravel/framework v1.17.2
 	github.com/goravel/gin v1.17.0
+	github.com/goravel/mysql v1.17.1
 	github.com/goravel/postgres v1.17.1
 	github.com/stretchr/testify v1.11.1
 )
@@ -62,7 +63,6 @@ require (
 	github.com/gookit/goutil v0.7.1 // indirect
 	github.com/gookit/validate v1.5.6 // indirect
 	github.com/goravel/file-rotatelogs/v2 v2.4.2 // indirect
-	github.com/goravel/mysql v1.17.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

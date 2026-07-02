@@ -71,6 +71,7 @@
 }
 
 * { box-sizing: border-box; }
+html, body, #root { height: 100%; }
 body { margin: 0; background: var(--bg); }
 a { color: var(--primary); text-decoration: none; }
 h1, h2, h3 { color: var(--text-h); margin: 0 0 0.5rem; }

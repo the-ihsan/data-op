@@ -42,7 +42,9 @@ data-op/
   plain-CSS design system still lives in `src/index.css` and older pages/components use
   it — shadcn tokens are mapped onto the same brand palette (see the `@theme inline`
   block + `:root`), so the two coexist. Path alias `@/*` → `src/*` (vite + tsconfig).
-- **DB:** PostgreSQL 18 (dev via Docker container `dataop-pg`, host port **5433**).
+- **DB:** the API supports postgres and mysql; the **current dev `api/.env` uses MySQL**
+ (host 127.0.0.1:3306, db `dpt_dataop`, user `root`). The original Postgres 18 docker
+ setup (`dataop-pg`, host port 5433) still works if `.env` is switched back.
 
 ## Run / dev workflow
 
@@ -52,18 +54,16 @@ module cache complains):
 go run . artisan migrate        # apply migrations
 go run . artisan migrate:fresh  # drop + re-run all (wipes data)
 go run . artisan db:seed        # demo campaign + user
-go run .                        # serve http://127.0.0.1:3000
+go run .                        # serve http://127.0.0.1:3001 (APP_PORT in api/.env)
 go test ./...
 ```
 Frontend (`ui/`): `pnpm install` then `pnpm run dev` → http://127.0.0.1:5173 (add shadcn
 components with `pnpm dlx shadcn@latest add <name>`). Vite proxies
-`/api/*` to `:3000` (see `ui/vite.config.ts`), so the SPA calls same-origin `/api/v1/...`.
-
-Start Postgres (matches `api/.env`):
-```
-docker run -d --name dataop-pg -e POSTGRES_USER=dataop -e POSTGRES_PASSWORD=dataop \
-  -e POSTGRES_DB=dataop -p 5433:5432 postgres:18
-```
+`/api/*` to `:3001` (see `ui/vite.config.ts`) — **the proxy target must match
+`APP_PORT` in `api/.env`**, so the SPA calls same-origin `/api/v1/...`. Gotcha: a
+stale compiled backend binary left listening on another port answers with 404s for
+routes added later — if a registered route 404s, check for and kill old `goravel`/
+`main.exe` processes (`ss -tlnp | grep 300`).
 
 **Demo login (after seed):** `alice@dataop.dev` / `password` — owns the "Customer
 Feedback" campaign (Intake → Triage → Resolution, with an inherited `email` field and
@@ -128,7 +128,8 @@ members: `GET/POST …/members`, `PUT/DELETE …/members/{member}` ·
 stages: `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` ·
 fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` ·
 constraints: `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` ·
-records: `GET/POST …/records`, `GET …/records/{record}`, `GET/PUT …/records/{record}/values` ·
+records: `GET/POST …/records`, `GET/DELETE …/records/{record}` (delete needs the
+`delete` perm, cascades values/keys/transitions), `GET/PUT …/records/{record}/values` ·
 flow: `POST …/records/{record}/{processing|release|advance}` ·
 analytics: `GET …/campaigns/{campaign}/analytics`.
 
@@ -139,19 +140,32 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
 - `api/types.ts` — TS types + `parseOptions`/`parseFieldKeys` helpers.
 - `api/resources.ts` — typed endpoint wrappers grouped by resource.
 - `auth/AuthContext.tsx` — `useAuth()` (user/login/register/logout).
-- `App.tsx` — routes + `Protected` layout. `pages/`: Login, Campaigns, CampaignDetail
-  (tabs: **Timeline**/stages/members/analytics/settings — the `records` tab key now
-  renders the timeline), RecordDetail (dynamic form + flow actions). `components/`:
+- `App.tsx` — routes + `Protected` layout. The layout is **full width** (no
+ `.container` on `main`) and exports `TopbarPortal`, which portals children into a
+ slot in the topbar — CampaignDetail renders its back link, campaign name, badges
+ and tab nav there to maximize vertical space for the grid. `pages/`: Login,
+ Campaigns, CampaignDetail (tabs: **Timeline**/stages/members/analytics/settings —
+ the `records` tab key renders the timeline), RecordDetail (dynamic form + flow
+ actions; inherited `prev_stage_key` fields render disabled). `components/`:
   StageBuilder, Members, Settings, AnalyticsPanel, `DynamicForm` (form engine), and
   `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
-  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style
-    grid** (shadcn `Table`) with one editable cell per field. Cells save on blur/Enter
-    via `recordApi.saveValues` (per-record, current stage). Required-field validation only
-    fires on advance, so cells edit freely even with no data.
-  - **Row hover** reveals a floating action popup (mark/unmark processing, move to next
-    stage / finish) via CSS `group-hover`; advance errors surface inline on the row.
-  - A permanent **empty add-row** at the bottom of the **first** stage; committing any
-    cell creates a record (`recordApi.create`) then saves the values.
+ - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style
+ grid** (shadcn `Table`) with one editable cell per field. Cells save on blur/Enter
+ via `recordApi.saveValues` (per-record, current stage). Required-field validation only
+ fires on advance, so cells edit freely even with no data.
+ - **Inherited cells** (`prev_stage_key` set) are read-only in the grid (muted text,
+ tooltip) since their values are seeded on advance.
+ - **Repeatable fields** (`max_count` 0 or > 1, scalar types) use `MultiEntryCell`: a
+ popover with one input per entry plus add/remove; saves when the popover closes.
+ - **Row actions** open a **context menu beside the cursor** (right-click anywhere on
+ the row, or click the row's trailing "…" button): mark/unmark processing, move to
+ next stage / finish, and **Delete** with confirm (also on finished rows). Rendered
+ via `createPortal` + `position: fixed`, viewport-clamped; closes on outside click /
+ Escape / scroll; failed actions keep it open with the error inline (`RowActionsMenu`).
+ - A permanent **empty add-row** at the bottom of the **first** stage; committing any
+ cell creates a record (`recordApi.create`) then saves the values. If the value save
+ fails the just-created record is **rolled back** (deleted) and the draft is kept so
+ the user can fix it — no orphan empty rows.
   - **"My data" / "All data"** toggle filters by `created_by`; defaults to My data.
   - "Edit fields" button switches to the Stages tab (`onEditStage`) — columns are
     editable before any records exist.
@@ -175,4 +189,8 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
 - Uniqueness is enforced in a **transaction**: `StoreValues` then `EnforceUniqueness`;
   a conflict returns `ErrUniquenessConflict` to force rollback → controller responds 409.
 - Testing tip: when shell-scripting curl with a bearer token, **quote the whole header**
-  (`-H "Authorization: Bearer $TOK"`) — an unquoted var splits on the space.
+ (`-H "Authorization: Bearer $TOK"`) — an unquoted var splits on the space.
+- `StageTimeline.tsx` once contained **corrupted bytes** (NUL / control chars where
+ `…`, `—`, `“”` and a lock glyph should be), which made ripgrep treat the file as
+ binary and silently return no matches. If a grep on a UI file unexpectedly finds
+ nothing, check for control bytes (`grep -nP '[\x00-\x1F]'`).

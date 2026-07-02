@@ -1,10 +1,21 @@
 import { Navigate, Route, Routes, Link, useLocation } from 'react-router-dom'
+import { createPortal } from 'react-dom'
+import { createContext, useContext, useState } from 'react'
 import { useAuth } from './auth/AuthContext'
 import Login from './pages/Login'
 import Campaigns from './pages/Campaigns'
 import CampaignDetail from './pages/CampaignDetail'
 import RecordDetail from './pages/RecordDetail'
 import type { ReactNode } from 'react'
+
+const TopbarSlotContext = createContext<HTMLDivElement | null>(null)
+
+/** Renders its children inside the app topbar, next to the brand. */
+export function TopbarPortal({ children }: { children: ReactNode }) {
+  const el = useContext(TopbarSlotContext)
+  if (!el) return null
+  return createPortal(children, el)
+}
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -16,19 +27,22 @@ function Protected({ children }: { children: ReactNode }) {
 
 function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth()
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   return (
-    <div>
-      <header className="topbar">
+    <div className="flex h-full flex-col overflow-hidden">
+      <header className="topbar shrink-0">
         <Link to="/" className="brand">
           Data<span>Op</span>
         </Link>
-        <div className="spacer" />
+        <div ref={setSlot} className="flex min-w-0 flex-1 items-center gap-3" />
         <span className="muted">{user?.name}</span>
         <button className="btn ghost" onClick={logout}>
           Log out
         </button>
       </header>
-      <main className="container">{children}</main>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+        <TopbarSlotContext.Provider value={slot}>{children}</TopbarSlotContext.Provider>
+      </main>
     </div>
   )
 }

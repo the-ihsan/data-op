@@ -92,6 +92,8 @@ export const recordApi = {
     unwrap<RecordRow[]>(api.get(`/campaigns/${campaignId}/records`, { params })),
   create: (campaignId: number) =>
     unwrap<RecordRow>(api.post(`/campaigns/${campaignId}/records`, {})),
+  remove: (campaignId: number, recordId: number) =>
+    api.delete(`/campaigns/${campaignId}/records/${recordId}`),
   form: (campaignId: number, recordId: number) =>
     unwrap<RecordFormData>(api.get(`/campaigns/${campaignId}/records/${recordId}/values`)),
   saveValues: (campaignId: number, recordId: number, values: Record<string, string[]>) =>

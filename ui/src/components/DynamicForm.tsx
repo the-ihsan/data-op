@@ -48,6 +48,8 @@ export default function DynamicForm({
         const options = parseOptions(field)
         const canAddMore = field.max_count === 0 || entries.length < field.max_count
         const repeatable = field.type !== 'multiselect' && field.max_count !== 1
+        // Inherited fields are seeded from the previous stage and are read-only.
+        const fieldDisabled = disabled || field.prev_stage_key !== ''
 
         return (
           <div className="field" key={field.id}>
@@ -64,7 +66,7 @@ export default function DynamicForm({
                   <label key={opt} className="inline">
                     <input
                       type="checkbox"
-                      disabled={disabled}
+                      disabled={fieldDisabled}
                       checked={(values[field.key] ?? []).includes(opt)}
                       onChange={(e) => setMulti(field.key, opt, e.target.checked)}
                     />
@@ -80,17 +82,17 @@ export default function DynamicForm({
                       field={field}
                       value={val}
                       options={options}
-                      disabled={disabled}
+                      disabled={fieldDisabled}
                       onChange={(v) => setEntry(field.key, i, v)}
                     />
-                    {repeatable && entries.length > 1 && !disabled && (
+                    {repeatable && entries.length > 1 && !fieldDisabled && (
                       <button className="btn ghost sm" onClick={() => removeEntry(field.key, i)}>
                         ✕
                       </button>
                     )}
                   </div>
                 ))}
-                {repeatable && canAddMore && !disabled && (
+                {repeatable && canAddMore && !fieldDisabled && (
                   <button className="btn sm" onClick={() => addEntry(field.key)}>
                     + Add another
                   </button>
