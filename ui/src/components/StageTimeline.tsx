@@ -94,6 +94,7 @@ export default function StageTimeline({
 }) {
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null)
   const [mineOnly, setMineOnly] = useState(true)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'processing'>('all')
   const [selectedTotal, setSelectedTotal] = useState(0)
   const [bulkOpen, setBulkOpen] = useState(false)
 
@@ -173,6 +174,17 @@ export default function StageTimeline({
         <Badge variant="secondary">{selectedTotal}</Badge>
         <div className="flex-1" />
         <div className="inline-flex overflow-hidden rounded-md border">
+          {(['all', 'open', 'processing'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={cn('px-3 py-1.5 text-xs font-medium capitalize', statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground')}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex overflow-hidden rounded-md border">
           <button
             onClick={() => setMineOnly(true)}
             className={cn('px-3 py-1.5 text-xs font-medium', mineOnly ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground')}
@@ -211,6 +223,7 @@ export default function StageTimeline({
         nextStage={nextStage}
         isFirstStage={selectedIndex === 0}
         mineOnly={mineOnly}
+        statusFilter={statusFilter}
         orderedStages={orderedStages}
         onTotalChange={handleTotalChange}
         onEditStage={onEditStage}
@@ -227,6 +240,7 @@ function StageGrid({
   nextStage,
   isFirstStage,
   mineOnly,
+  statusFilter,
   orderedStages,
   onTotalChange,
   onEditStage,
@@ -236,21 +250,23 @@ function StageGrid({
   nextStage?: Stage
   isFirstStage: boolean
   mineOnly: boolean
+  statusFilter: 'all' | 'open' | 'processing'
   orderedStages: Stage[]
   onTotalChange: (total: number) => void
   onEditStage: () => void
 }) {
   const [page, setPage] = useState(1)
 
-  // Reset to page 1 whenever the viewed stage or mine-filter changes.
-  useEffect(() => { setPage(1) }, [stage.id, mineOnly])
+  // Reset to page 1 whenever the viewed stage, mine-filter, or status-filter changes.
+  useEffect(() => { setPage(1) }, [stage.id, mineOnly, statusFilter])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['records', campaign.id, stage.id, mineOnly, page],
+    queryKey: ['records', campaign.id, stage.id, mineOnly, statusFilter, page],
     queryFn: () =>
       recordApi.list(campaign.id, {
         stage: stage.id,
         mine: mineOnly || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
         page,
         per_page: PER_PAGE,
       }),
