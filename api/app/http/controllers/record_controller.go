@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/contracts/http"
 	"github.com/goravel/framework/facades"
@@ -341,6 +344,116 @@ func (r *RecordController) History(ctx http.Context) http.Response {
 	}
 
 	return ok(ctx, http.Json{"transitions": entries})
+}
+
+// BulkImport creates one record per entry in the submitted values list, all
+// placed at the campaign's first stage. The first stage must have exactly one
+// field. Each empty/whitespace-only entry is silently skipped. The response
+// reports how many succeeded and, for those that failed, their 0-based index
+// in the submitted array together with the error reason.
+func (r *RecordController) BulkImport(ctx http.Context) http.Response {
+	campaign, resp := loadCampaign(ctx)
+	if resp != nil {
+		return resp
+	}
+	uid := currentUserID(ctx)
+	if _, err := services.Authorize(uid, campaign.ID, services.PermAdd); err != nil {
+		return forbidden(ctx, "you do not have permission to add records")
+	}
+
+	var firstStage models.Stage
+	if err := facades.Orm().Query().Where("campaign_id", campaign.ID).Order("position ASC").First(&firstStage); err != nil {
+		return serverError(ctx, err)
+	}
+	if firstStage.ID == 0 {
+		return badRequest(ctx, "campaign has no stages yet")
+	}
+
+	fields, err := services.StageFields(facades.Orm().Query(), firstStage.ID)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+	if len(fields) != 1 {
+		return badRequest(ctx, "bulk import requires the first stage to have exactly one field")
+	}
+	field := fields[0]
+
+	var body struct {
+		Values []string `json:"values"`
+	}
+	if err := ctx.Request().Bind(&body); err != nil {
+		return badRequest(ctx, "invalid request body")
+	}
+	if len(body.Values) == 0 {
+		return badRequest(ctx, "no values provided")
+	}
+
+	type FailedEntry struct {
+		Index int    `json:"index"`
+		Error string `json:"error"`
+	}
+	var failed []FailedEntry
+	succeeded := 0
+
+	for i, val := range body.Values {
+		val = strings.TrimSpace(val)
+		if val == "" {
+			continue
+		}
+
+		txErr := facades.Orm().Transaction(func(tx orm.Query) error {
+			record := models.Record{
+				CampaignID:     campaign.ID,
+				CurrentStageID: firstStage.ID,
+				Status:         models.RecordStatusOpen,
+				CreatedBy:      uid,
+			}
+			if err := tx.Create(&record); err != nil {
+				return err
+			}
+			transition := models.RecordTransition{
+				RecordID:  record.ID,
+				ToStageID: firstStage.ID,
+				MovedBy:   uid,
+				Note:      "created",
+			}
+			if err := tx.Create(&transition); err != nil {
+				return err
+			}
+			rawValues := map[string][]string{field.Key: {val}}
+			valuesByKey, err := services.StoreValues(tx, record.ID, firstStage.ID, fields, rawValues)
+			if err != nil {
+				return err
+			}
+			label, err := services.EnforceUniqueness(tx, record.ID, firstStage.ID, valuesByKey)
+			if err != nil {
+				return err
+			}
+			if label != "" {
+				return services.ErrUniquenessConflict{Label: label}
+			}
+			return nil
+		})
+
+		if txErr != nil {
+			msg := "internal error"
+			var ve services.ErrValidation
+			var uc services.ErrUniquenessConflict
+			if errors.As(txErr, &ve) {
+				msg = ve.Message
+			} else if errors.As(txErr, &uc) {
+				msg = "duplicate value: " + uc.Label
+			}
+			failed = append(failed, FailedEntry{Index: i, Error: msg})
+		} else {
+			succeeded++
+		}
+	}
+
+	return ok(ctx, http.Json{
+		"succeeded": succeeded,
+		"failed":    failed,
+	})
 }
 
 // ensureNotLockedByOther blocks edits when another user holds the lock in a

@@ -61,6 +61,7 @@ func Api() {
 		// Records and the stage data-flow
 		router.Get("campaigns/{campaign}/records", records.Index)
 		router.Post("campaigns/{campaign}/records", records.Store)
+		router.Post("campaigns/{campaign}/records/bulk", records.BulkImport)
 		router.Get("campaigns/{campaign}/records/{record}", records.Show)
 		router.Delete("campaigns/{campaign}/records/{record}", records.Destroy)
 		router.Get("campaigns/{campaign}/records/{record}/values", values.Index)

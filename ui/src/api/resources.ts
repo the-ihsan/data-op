@@ -1,6 +1,7 @@
 import { api, unwrap } from './client'
 import type {
   Analytics,
+  BulkImportResult,
   Campaign,
   CampaignMember,
   PaginatedRecords,
@@ -112,6 +113,8 @@ export const recordApi = {
     unwrap<RecordRow>(api.post(`/campaigns/${campaignId}/records/${recordId}/advance`, { note })),
   history: (campaignId: number, recordId: number) =>
     unwrap<RecordHistory>(api.get(`/campaigns/${campaignId}/records/${recordId}/history`)),
+  bulkImport: (campaignId: number, values: string[]) =>
+    unwrap<BulkImportResult>(api.post(`/campaigns/${campaignId}/records/bulk`, { values })),
 }
 
 // --- Analytics ---

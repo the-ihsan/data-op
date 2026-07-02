@@ -130,6 +130,11 @@ export interface RecordHistory {
   transitions: RecordTransitionEntry[]
 }
 
+export interface BulkImportResult {
+  succeeded: number
+  failed: Array<{ index: number; error: string }>
+}
+
 export interface Analytics {
   total_records: number
   by_stage: { stage_id: number; name: string; position: number; count: number }[]

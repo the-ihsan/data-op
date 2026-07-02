@@ -154,8 +154,10 @@ members: `GET/POST …/members`, `PUT/DELETE …/members/{member}` ·
 stages: `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` ·
 fields: `POST/PUT/DELETE …/stages/{stage}/fields[/{field}]` ·
 constraints: `POST/DELETE …/stages/{stage}/constraints[/{constraint}]` ·
-records: `GET/POST …/records`, `GET/DELETE …/records/{record}` (delete needs the
-`delete` perm, cascades values/keys/transitions), `GET/PUT …/records/{record}/values`,
+records: `GET/POST …/records`, `POST …/records/bulk` (bulk import; first stage must
+have exactly 1 field; body `{values:[…]}`; returns `{succeeded, failed:[{index,error}]}`),
+`GET/DELETE …/records/{record}` (delete needs the `delete` perm, cascades values/keys/
+transitions), `GET/PUT …/records/{record}/values`,
 `GET …/records/{record}/history` (transitions with resolved user + stage names) ·
   - `GET /records` supports `?stage=`, `?status=`, `?mine=true`, `?page=` (default 1),
     `?per_page=` (default 50, max 200). Returns `{ records, total, page, per_page }`;
@@ -208,7 +210,14 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  fails the just-created record is **rolled back** (deleted) and the draft is kept so
  the user can fix it — no orphan empty rows. After a successful create, the grid
  navigates to the last page so the new row is immediately visible.
-  - **"My data" / "All data"** toggle sends `?mine=true`; backend returns records where `created_by = uid` OR the user appears in any `RecordTransition` for that record (`moved_by = uid`), i.e. records touched at any stage. Defaults to My data.
+   - **"Bulk Add"** button appears in the toolbar when the selected stage is the
+     first stage and has exactly one field. Opens `BulkImportModal`: textarea
+     (one entry per line), Import button with live line count, non-closable during
+     import (backdrop + Escape blocked), blocked on backdrop/Escape if textarea has
+     content. After import shows succeeded/failed summary; failed entries listed with
+     1-based line number, original value, and error; "Edit failed entries" re-populates
+     textarea with only the failed lines for retry.
+   - **"My data" / "All data"** toggle sends `?mine=true`; backend returns records where `created_by = uid` OR the user appears in any `RecordTransition` for that record (`moved_by = uid`), i.e. records touched at any stage. Defaults to My data.
   - "Edit fields" button switches to the Stages tab (`onEditStage`) — columns are
     editable before any records exist.
   - `components/ui/` holds shadcn primitives (button, badge, table, input, select,
