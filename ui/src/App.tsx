@@ -35,8 +35,8 @@ function Layout({ children }: { children: ReactNode }) {
           Data<span>Op</span>
         </Link>
         <div ref={setSlot} className="flex min-w-0 flex-1 items-center gap-3" />
-        <span className="muted">{user?.name}</span>
-        <button className="btn ghost" onClick={logout}>
+        <span className="muted hidden drawer-nav:inline">{user?.name}</span>
+        <button className="btn ghost hidden drawer-nav:inline-flex" onClick={logout}>
           Log out
         </button>
       </header>

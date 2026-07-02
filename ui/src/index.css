@@ -2,6 +2,7 @@
 
 /* Map shadcn/ui utility colors onto our brand palette (see :root below). */
 @theme inline {
+  --breakpoint-drawer-nav: 75rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

@@ -147,7 +147,9 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
 - `App.tsx` — routes + `Protected` layout. The layout is **full width** (no
  `.container` on `main`) and exports `TopbarPortal`, which portals children into a
  slot in the topbar — CampaignDetail renders its back link, campaign name, badges
- and tab nav there to maximize vertical space for the grid. `pages/`: Login,
+ and tab nav there to maximize vertical space for the grid. Below **1200px** (`drawer-nav`
+ breakpoint) the topbar shows only the logo + `DrawerNav` menu trigger; campaign metadata
+ and tabs move into a left **Sheet** drawer. `pages/`: Login,
  Campaigns, CampaignDetail (tabs: **Timeline**/stages/members/analytics/settings —
  the `records` tab key renders the timeline), RecordDetail (dynamic form + flow
  actions; inherited `prev_stage_key` fields render disabled). `components/`:
@@ -184,7 +186,7 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   - "Edit fields" button switches to the Stages tab (`onEditStage`) — columns are
     editable before any records exist.
   - `components/ui/` holds shadcn primitives (button, badge, table, input, select,
-    dropdown-menu, popover); `components.json` configures the shadcn CLI.
+    dropdown-menu, popover, dialog, sheet); `components.json` configures the shadcn CLI.
 
 ## Gotchas / conventions learned (don't re-discover these)
 
