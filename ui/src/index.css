@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+
+/* Map shadcn/ui utility colors onto our brand palette (see :root below). */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-surface);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --text: #3f3d4b;
+  --muted: #8a8794;
+  --text-h: #17141f;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --border: #e5e4e7;
+  --primary: #4f46e5;
+  --primary-d: #4338ca;
+  --danger: #dc2626;
+  --ok: #16a34a;
+  --warn: #d97706;
+
+  /* shadcn/ui tokens (values chosen to match the brand palette above) */
+  --radius: 0.625rem;
+  --background: #f6f7f9;
+  --foreground: #17141f;
+  --card: #ffffff;
+  --card-foreground: #17141f;
+  --popover: #ffffff;
+  --popover-foreground: #17141f;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f0f3;
+  --secondary-foreground: #17141f;
+  --muted-surface: #f4f4f6;
+  --muted-foreground: #8a8794;
+  --accent: #eef2ff;
+  --accent-foreground: #4338ca;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --input: #e5e4e7;
+  --ring: #a5b4fc;
+
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--text);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+a { color: var(--primary); text-decoration: none; }
+h1, h2, h3 { color: var(--text-h); margin: 0 0 0.5rem; }
+.muted { color: var(--muted); }
+.center { display: grid; place-items: center; min-height: 60vh; }
+.spacer { flex: 1; }
+.row { display: flex; gap: 0.75rem; align-items: center; }
+.wrap { flex-wrap: wrap; }
+.stack { display: flex; flex-direction: column; gap: 0.75rem; }
+
+/* Layout */
+.topbar {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.75rem 1.5rem; background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 700; font-size: 1.2rem; color: var(--text-h); }
+.brand span { color: var(--primary); }
+.container { max-width: 1080px; margin: 1.5rem auto; padding: 0 1.5rem; }
+
+/* Panels */
+.panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+
+/* Buttons */
+.btn {
+  border: 1px solid var(--border); background: var(--panel); color: var(--text-h);
+  padding: 0.5rem 0.9rem; border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn.primary:hover { background: var(--primary-d); }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--danger); border-color: #f3c2c2; }
+.btn.sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Forms */
+label { font-size: 0.85rem; color: var(--text-h); font-weight: 500; }
+input, select, textarea {
+  width: 100%; padding: 0.5rem 0.65rem; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 0.9rem; background: #fff; color: var(--text-h);
+}
+input[type='checkbox'] { width: auto; }
+.field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
+.inline { flex-direction: row; align-items: center; gap: 0.4rem; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.tab { padding: 0.55rem 0.9rem; cursor: pointer; border-bottom: 2px solid transparent; color: var(--muted); }
+.tab.active { color: var(--text-h); border-bottom-color: var(--primary); font-weight: 600; }
+
+/* Badges & pills */
+.badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: #eef; color: var(--primary-d); }
+.badge.open { background: #eef2ff; color: var(--primary-d); }
+.badge.processing { background: #fef3c7; color: var(--warn); }
+.badge.finished { background: #dcfce7; color: var(--ok); }
+.tag { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px; background: #f1f0f3; color: var(--muted); }
+.tag.unique { background: #ede9fe; color: var(--primary-d); }
+.tag.req { background: #fee2e2; color: var(--danger); }
+.tag.inherit { background: #e0f2fe; color: #0369a1; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; }
+
+/* Board */
+.board { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 0.5rem; }
+.column { min-width: 240px; flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; }
+.column h3 { font-size: 0.9rem; display: flex; justify-content: space-between; }
+.card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem; margin-top: 0.5rem; cursor: pointer; }
+.card:hover { border-color: var(--primary); }
+
+/* Misc */
+.error { background: #fef2f2; color: var(--danger); padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.85rem; }
+.notice { background: #eff6ff; color: #1e40af; padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.85rem; }
+.bar { height: 10px; background: var(--primary); border-radius: 4px; }
+.entry-row { display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.35rem; }
