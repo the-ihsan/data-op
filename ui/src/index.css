@@ -119,6 +119,9 @@ input, select, textarea {
   width: 100%; padding: 0.5rem 0.65rem; border: 1px solid var(--border);
   border-radius: 8px; font-size: 0.9rem; background: #fff; color: var(--text-h);
 }
+[data-slot='input-group-control'] {
+  border: none; background: transparent; border-radius: 0; box-shadow: none;
+}
 input[type='checkbox'] { width: auto; }
 .field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
 .inline { flex-direction: row; align-items: center; gap: 0.4rem; }

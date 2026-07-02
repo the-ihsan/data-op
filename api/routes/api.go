@@ -10,6 +10,7 @@ import (
 
 func Api() {
 	auth := controllers.NewAuthController()
+	users := controllers.NewUserController()
 	campaigns := controllers.NewCampaignController()
 	members := controllers.NewCampaignMemberController()
 	stages := controllers.NewStageController()
@@ -29,6 +30,8 @@ func Api() {
 	facades.Route().Prefix("api/v1").Middleware(middleware.Auth()).Group(func(router route.Router) {
 		router.Get("auth/me", auth.Me)
 		router.Post("auth/logout", auth.Logout)
+
+		router.Get("users/search", users.Search)
 
 		// Campaigns
 		router.Get("campaigns", campaigns.Index)

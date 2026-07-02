@@ -23,6 +23,12 @@ export const authApi = {
   me: () => unwrap<User>(api.get('/auth/me')),
 }
 
+// --- Users ---
+export const userApi = {
+  search: (q: string) =>
+    unwrap<User[]>(api.get('/users/search', { params: { q } })),
+}
+
 // --- Campaigns ---
 export const campaignApi = {
   list: () => unwrap<Campaign[]>(api.get('/campaigns')),

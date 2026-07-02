@@ -202,6 +202,7 @@ a unique `email` at Intake).
 ## API surface (`/api/v1`, JWT via `Authorization: Bearer <token>`)
 
 auth: `POST register|login`, `GET me`, `POST logout` ·
+users: `GET /users/search?q=` (min 2 chars; matches username/name, max 20) ·
 campaigns: `GET/POST /campaigns`, `GET/PUT/DELETE /campaigns/{campaign}` ·
 members: `GET/POST …/members`, `PUT/DELETE …/members/{member}` ·
 stages: `GET/POST …/stages`, `PUT/DELETE …/stages/{stage}` (create/update accept
@@ -249,7 +250,8 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   module (`api/wasm/sanitize` → `ui/public/wasm/sanitize.wasm`, built by
   `scripts/build-sanitize-wasm.sh`; runs the same `starlark.Validate` as the API) plus guide dialog. Backend 409s when edits would lose data.
   Field order: `sortStageFields()` in `src/lib/stageFields.ts` (UI); `services.SortStageFields` + `StageFields()` order by `position ASC` (API).
-  Members, Settings, AnalyticsPanel, `DynamicForm` (form engine; applies `default_value`
+  Members (`components/Members.tsx`) — search users via `GET /users/search`, multi-select
+  chips, add several at once with shared role/perms; Settings, AnalyticsPanel, `DynamicForm` (form engine; applies `default_value`
   when empty), and `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style
  grid** (shadcn `Table`) with one editable cell per field. Existing rows save on **blur**
