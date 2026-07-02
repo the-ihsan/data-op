@@ -2,8 +2,8 @@
 # `docker compose down -v` in production (that deletes db_data).
 #
 # First-time setup:
-#   cp env.example .env && edit secrets
-#   docker compose -f docker-compose.prod.yml up -d --build
+#   cp api/.env.example api/.env && edit secrets
+#   ./deploy.sh
 #
 # Updates (also used by CI/CD via deploy.sh):
 #   ./deploy.sh
@@ -32,9 +32,11 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_PORT:-3000}:3000"
-    env_file: .env
+    env_file:
+      - ../api/.env
     environment:
       APP_HOST: 0.0.0.0
+      APP_PORT: 3000
       DB_HOST: db
       DB_PORT: 3306
       DB_USERNAME: root

@@ -26,6 +26,7 @@ RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -H -u 1000 app
 WORKDIR /app
 COPY --from=api-build /out/main ./main
+COPY --from=api-build /build/api/public ./public
 COPY --from=api-build /build/api/resources ./resources
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh \

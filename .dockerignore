@@ -2,7 +2,6 @@
 .github
 **/.env
 **/.env.*
-!**/env.example
 !**/.env.example
 **/node_modules
 ui/dist
@@ -10,4 +9,3 @@ api/storage/logs/*
 api/tmp
 **/*.md
 !README.md
-deploy/.env

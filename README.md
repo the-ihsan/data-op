@@ -117,16 +117,16 @@ server.
 | `Dockerfile` | Multi-stage: `pnpm build` → copy to `api/public/` → `go build` |
 | `deploy/docker-compose.prod.yml` | App + MySQL with **named volumes** (`db_data`, `app_storage`) |
 | `deploy/deploy.sh` | Safe deploy: rebuild app, `up -d`, **`artisan migrate` only** |
-| `deploy/env.example` | Production `.env` template (includes DB vars) |
+| `api/.env.example` | Env template for local dev and Docker production (`api/.env`) |
 | `.github/workflows/deploy.yml` | CI tests + SSH deploy on push to `main` |
 
 ### Database configuration
 
 The default stack **bundles MySQL 8.4** in `docker-compose.prod.yml`. You only need to
-set database variables in `deploy/.env` — Docker Compose creates the database and the app
+set database variables in `api/.env` — Docker Compose creates the database and the app
 connects over the internal `db` hostname.
 
-**Required variables in `deploy/.env`:**
+**Required variables in `api/.env`:**
 
 | Variable | Example | Notes |
 |----------|---------|-------|
@@ -141,7 +141,7 @@ connects over the internal `db` hostname.
 container. The app service overrides `DB_HOST=db` so the API reaches MySQL on the Docker
 network (not via localhost on the host).
 
-**Example `deploy/.env` database block:**
+**Example `api/.env` database block (Docker production):**
 
 ```bash
 DB_CONNECTION=mysql
@@ -175,14 +175,14 @@ Postgres instance, and remove the bundled `db` service (the compose file ships M
 # On the VPS
 sudo mkdir -p /opt/data-op && sudo chown $USER /opt/data-op
 git clone <repo-url> /opt/data-op
+cp api/.env.example api/.env
+# Edit api/.env: set DB_PASSWORD, DB_DATABASE, APP_URL, then generate APP_KEY + JWT_SECRET
 cd /opt/data-op/deploy
-cp env.example .env
-# Edit .env: set DB_PASSWORD, DB_DATABASE, APP_URL, then generate APP_KEY + JWT_SECRET
 
 # Generate secrets (after first build):
-docker compose -f docker-compose.prod.yml build app
-docker compose -f docker-compose.prod.yml run --rm app ./main artisan key:generate --show
-docker compose -f docker-compose.prod.yml run --rm app ./main artisan jwt:secret --show
+docker compose --env-file ../api/.env -f docker-compose.prod.yml build app
+docker compose --env-file ../api/.env -f docker-compose.prod.yml run --rm app ./main artisan key:generate --show
+docker compose --env-file ../api/.env -f docker-compose.prod.yml run --rm app ./main artisan jwt:secret --show
 
 chmod +x deploy.sh && ./deploy.sh
 ```
@@ -220,7 +220,7 @@ its `db_data` volume intact. Existing rows are kept; only new/pending migrations
 ### Local production smoke test
 
 ```bash
-cd deploy && cp env.example .env   # adjust DB_PASSWORD
-./deploy.sh
+cp api/.env.example api/.env   # set DB_PASSWORD, DB_DATABASE, APP_KEY, JWT_SECRET
+cd deploy && ./deploy.sh
 # → http://127.0.0.1:3000 serves UI + API
 ```

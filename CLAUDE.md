@@ -27,7 +27,7 @@ data-op/
   api/         # Goravel (Go) REST API
   ui/          # React SPA (Vite + TypeScript)
   Dockerfile   # production: ui/dist → api/public + Go binary
-  deploy/      # docker-compose.prod.yml, deploy.sh, env.example
+  deploy/      # docker-compose.prod.yml, deploy.sh
   .github/workflows/deploy.yml
   README.md
   CLAUDE.md
@@ -86,11 +86,9 @@ a unique `email` at Intake).
   (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` secrets), `git pull --ff-only`, `./deploy/deploy.sh`.
 - **Data safety:** deploy scripts never call `migrate:fresh`/`migrate:reset`/`migrate:refresh`.
   Only `artisan migrate` (pending migrations only).
-- **Prod env:** copy `deploy/env.example` → `deploy/.env`; set `DB_PASSWORD`,
-  `DB_DATABASE`, `APP_KEY`, `JWT_SECRET`, `APP_URL`. DB vars: `DB_HOST=db` (bundled MySQL
-  service name), `DB_USERNAME=root`. External DB: remove `db` service from compose, set
-  `DB_HOST` to real host. `APP_HOST=0.0.0.0`, `APP_ENV=production`, `APP_DEBUG=false`.
-  Dev still uses Vite on `:5173` with API proxy.
+- **Prod env:** copy `api/.env.example` → `api/.env`; set `DB_PASSWORD`,
+  `DB_DATABASE`, `APP_KEY`, `JWT_SECRET`, `APP_URL`. `deploy.sh` passes `--env-file
+  api/.env`; compose overrides `APP_HOST=0.0.0.0`, `DB_HOST=db` for the app container.
 
 ## Domain model & concurrency
 
