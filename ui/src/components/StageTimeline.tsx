@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MutableRefObject,
   type MouseEvent as ReactMouseEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -21,7 +22,6 @@ import {
   Loader2,
   Lock,
   MoreHorizontal,
-  Pencil,
   Play,
   Plus,
   ShieldAlert,
@@ -86,12 +86,20 @@ function valuesForStage(record: RecordRow, stageId: number): CellValues {
   return out
 }
 
+type RowSaveState = 'clean' | 'dirty' | 'saving' | 'saved' | 'error'
+
+function fieldValuesEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+  const x = a ?? []
+  const y = b ?? []
+  return x.length === y.length && x.every((v, i) => v === y[i])
+}
+
 export default function StageTimeline({
   campaign,
-  onEditStage,
+  onAddFields,
 }: {
   campaign: Campaign
-  onEditStage: () => void
+  onAddFields: () => void
 }) {
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null)
   const [mineOnly, setMineOnly] = useState(true)
@@ -174,39 +182,30 @@ export default function StageTimeline({
         <h3 className="m-0 text-base font-semibold text-foreground">{selectedStage.name}</h3>
         <Badge variant="secondary">{selectedTotal}</Badge>
         <div className="flex-1" />
-        <div className="inline-flex overflow-hidden rounded-md border">
-          {(['all', 'open', 'processing'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={cn('px-3 py-1.5 text-xs font-medium capitalize', statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground')}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="inline-flex overflow-hidden rounded-md border">
-          <button
-            onClick={() => setMineOnly(true)}
-            className={cn('px-3 py-1.5 text-xs font-medium', mineOnly ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground')}
-          >
-            My data
-          </button>
-          <button
-            onClick={() => setMineOnly(false)}
-            className={cn('px-3 py-1.5 text-xs font-medium', !mineOnly ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground')}
-          >
-            All data
-          </button>
-        </div>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+          <SelectTrigger size="sm" className="h-8 w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="open">Open</SelectItem>
+            <SelectItem value="processing">Processing</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={mineOnly ? 'mine' : 'all'} onValueChange={(v) => setMineOnly(v === 'mine')}>
+          <SelectTrigger size="sm" className="h-8 w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="mine">My data</SelectItem>
+            <SelectItem value="all">All data</SelectItem>
+          </SelectContent>
+        </Select>
         {showBulkAdd && (
           <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
             <Upload /> Bulk Add
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onEditStage}>
-          <Pencil /> Edit fields
-        </Button>
       </div>
 
       {showBulkAdd && (
@@ -227,7 +226,7 @@ export default function StageTimeline({
         statusFilter={statusFilter}
         orderedStages={orderedStages}
         onTotalChange={handleTotalChange}
-        onEditStage={onEditStage}
+        onAddFields={onAddFields}
       />
     </div>
   )
@@ -244,7 +243,7 @@ function StageGrid({
   statusFilter,
   orderedStages,
   onTotalChange,
-  onEditStage,
+  onAddFields,
 }: {
   campaign: Campaign
   stage: Stage
@@ -254,7 +253,7 @@ function StageGrid({
   statusFilter: 'all' | 'open' | 'processing'
   orderedStages: Stage[]
   onTotalChange: (total: number) => void
-  onEditStage: () => void
+  onAddFields: () => void
 }) {
   const [page, setPage] = useState(1)
 
@@ -298,7 +297,7 @@ function StageGrid({
         <p className="mb-3 text-sm text-muted-foreground">
           This stage has no fields yet. Add columns to start collecting data.
         </p>
-        <Button size="sm" onClick={onEditStage}>
+        <Button size="sm" onClick={onAddFields}>
           <Plus /> Add fields
         </Button>
       </div>
@@ -381,6 +380,40 @@ function StageGrid({
   )
 }
 
+function rowSaveStateClass(state: RowSaveState): string {
+  const box = (border: string, extra = '') =>
+    cn(
+      border,
+      '[&>td:first-child]:border-l [&>td:last-child]:border-r',
+      extra,
+    )
+  switch (state) {
+    case 'dirty':
+      return box('[&>td]:border-y [&>td]:border-dashed [&>td]:border-amber-500/70')
+    case 'saving':
+      return box('[&>td]:border-y [&>td]:border-solid [&>td]:border-blue-400/50', '[&>td]:bg-blue-50/30 dark:[&>td]:bg-blue-950/20')
+    case 'saved':
+      return box('[&>td]:border-y [&>td]:border-solid [&>td]:border-green-500/60', '[&>td]:bg-green-50/30 dark:[&>td]:bg-green-950/20')
+    case 'error':
+      return box('[&>td]:border-y [&>td]:border-solid [&>td]:border-destructive/60', '[&>td]:bg-destructive/5')
+    default:
+      return ''
+  }
+}
+
+function focusNextEditableField(
+  fields: StageField[],
+  fieldRefs: MutableRefObject<Record<number, HTMLElement | null>>,
+  fromIndex: number,
+) {
+  for (let i = fromIndex + 1; i < fields.length; i++) {
+    const f = fields[i]
+    if (f.prev_stage_key) continue
+    fieldRefs.current[f.id]?.focus()
+    return
+  }
+}
+
 function GridRow({
   campaign,
   stage,
@@ -398,10 +431,14 @@ function GridRow({
 }) {
   const qc = useQueryClient()
   const uid = useAuth().user?.id
-  const [local, setLocal] = useState<CellValues>(() => valuesForStage(record, stage.id))
+  const savedValues = useMemo(() => valuesForStage(record, stage.id), [record, stage.id])
+  const [local, setLocal] = useState<CellValues>(() => savedValues)
+  const [savedSnapshot, setSavedSnapshot] = useState<CellValues>(() => savedValues)
   const [error, setError] = useState<string | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const fieldRefs = useRef<Record<number, HTMLElement | null>>({})
 
   const openMenu = (e: ReactMouseEvent) => {
     e.preventDefault()
@@ -410,8 +447,15 @@ function GridRow({
 
   // Re-sync when the record changes underneath us (e.g. after advance/refetch).
   useEffect(() => {
-    setLocal(valuesForStage(record, stage.id))
-  }, [record, stage.id])
+    setLocal(savedValues)
+    setSavedSnapshot(savedValues)
+    setJustSaved(false)
+  }, [savedValues])
+
+  const rowDirty = useMemo(
+    () => fields.some((f) => !f.prev_stage_key && !fieldValuesEqual(local[f.key], savedSnapshot[f.key])),
+    [fields, local, savedSnapshot],
+  )
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['records', campaign.id] })
@@ -419,8 +463,11 @@ function GridRow({
 
   const save = useMutation({
     mutationFn: (vals: CellValues) => recordApi.saveValues(campaign.id, record.id, vals),
-    onSuccess: () => {
+    onSuccess: (_data, vals) => {
       setError(null)
+      setSavedSnapshot(vals)
+      setJustSaved(true)
+      window.setTimeout(() => setJustSaved(false), 1500)
       invalidate()
     },
     onError: (e) => setError((e as Error).message),
@@ -432,15 +479,28 @@ function GridRow({
     if (commit) save.mutate(next)
   }
 
+  const commitRow = () => {
+    if (rowDirty && !save.isPending && !disabled) save.mutate(local)
+  }
+
+  const rowSaveState = useMemo((): RowSaveState => {
+    if (error && rowDirty) return 'error'
+    if (save.isPending && rowDirty) return 'saving'
+    if (justSaved) return 'saved'
+    if (rowDirty) return 'dirty'
+    return 'clean'
+  }, [error, rowDirty, save.isPending, justSaved])
+
   const finished = record.status === 'finished'
   const lockedByOther = !campaign.allow_concurrent_edit && record.locked_by != null && record.locked_by !== uid
   const disabled = finished || lockedByOther
 
   return (
-    <TableRow className="group relative" onContextMenu={openMenu}>
+    <TableRow className={cn('group relative', rowSaveStateClass(rowSaveState))} onContextMenu={openMenu}>
       <TableCell className="text-center text-xs text-muted-foreground">{record.id}</TableCell>
-      {fields.map((f) => {
+      {fields.map((f, fieldIndex) => {
         const inherited = f.prev_stage_key !== ''
+        const isLastEditable = !fields.slice(fieldIndex + 1).some((nf) => !nf.prev_stage_key)
         return (
           <TableCell
             key={f.id}
@@ -456,8 +516,14 @@ function GridRow({
                 field={f}
                 value={local[f.key] ?? []}
                 disabled={disabled}
+                saveOnBlur
+                inputRef={(el) => { fieldRefs.current[f.id] = el }}
+                onEnter={() => {
+                  if (isLastEditable) commitRow()
+                  else focusNextEditableField(fields, fieldRefs, fieldIndex)
+                }}
                 onChange={(arr, commit) => setCell(f.key, arr, commit)}
-                onCommit={() => save.mutate(local)}
+                onCommit={commitRow}
               />
             )}
           </TableCell>
@@ -505,7 +571,7 @@ function GridRow({
   )
 }
 
-/** A permanently-present empty row; committing any value creates a new record. */
+/** A permanently-present empty row; pressing Enter on the last field creates a new record. */
 function DraftRow({
   campaign,
   fields,
@@ -518,6 +584,8 @@ function DraftRow({
   const qc = useQueryClient()
   const [local, setLocal] = useState<CellValues>(() => defaultValuesForFields(fields))
   const [error, setError] = useState<string | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
+  const fieldRefs = useRef<Record<number, HTMLElement | null>>({})
 
   const create = useMutation({
     mutationFn: async (vals: CellValues) => {
@@ -534,6 +602,8 @@ function DraftRow({
     onSuccess: () => {
       setLocal(defaultValuesForFields(fields))
       setError(null)
+      setJustSaved(true)
+      window.setTimeout(() => setJustSaved(false), 1500)
       onCreated()
       qc.invalidateQueries({ queryKey: ['records', campaign.id] })
     },
@@ -547,26 +617,42 @@ function DraftRow({
     if (hasContent(vals) && !create.isPending) create.mutate(vals)
   }
 
+  const draftDirty = useMemo(() => hasContent(local), [local])
+
+  const rowSaveState = useMemo((): RowSaveState => {
+    if (error && draftDirty) return 'error'
+    if (create.isPending && draftDirty) return 'saving'
+    if (justSaved) return 'saved'
+    if (draftDirty) return 'dirty'
+    return 'clean'
+  }, [error, draftDirty, create.isPending, justSaved])
+
   return (
-    <TableRow className="bg-primary/3">
+    <TableRow className={cn('bg-primary/3', rowSaveStateClass(rowSaveState))}>
       <TableCell className="text-center text-muted-foreground">
         <Plus className="mx-auto size-4" />
       </TableCell>
-      {fields.map((f) => (
-        <TableCell key={f.id} className="p-1 align-middle">
-          <GridCell
-            field={f}
-            value={local[f.key] ?? []}
-            placeholder="New"
-            onChange={(arr, doCommit) => {
-              const next = { ...local, [f.key]: arr }
-              setLocal(next)
-              if (doCommit) commit(next)
-            }}
-            onCommit={() => commit(local)}
-          />
-        </TableCell>
-      ))}
+      {fields.map((f, fieldIndex) => {
+        const isLastEditable = !fields.slice(fieldIndex + 1).some((nf) => !nf.prev_stage_key)
+        return (
+          <TableCell key={f.id} className="p-1 align-middle">
+            <GridCell
+              field={f}
+              value={local[f.key] ?? []}
+              placeholder="New"
+              inputRef={(el) => { fieldRefs.current[f.id] = el }}
+              onEnter={() => {
+                if (isLastEditable) commit(local)
+                else focusNextEditableField(fields, fieldRefs, fieldIndex)
+              }}
+              onChange={(arr) => {
+                setLocal((prev) => ({ ...prev, [f.key]: arr }))
+              }}
+              onCommit={() => commit(local)}
+            />
+          </TableCell>
+        )
+      })}
       <TableCell className="text-xs text-muted-foreground">
         {create.isPending ? (
           <span className="flex items-center gap-1">
@@ -587,6 +673,9 @@ function GridCell({
   value,
   disabled,
   placeholder,
+  saveOnBlur,
+  inputRef,
+  onEnter,
   onChange,
   onCommit,
 }: {
@@ -594,6 +683,9 @@ function GridCell({
   value: string[]
   disabled?: boolean
   placeholder?: string
+  saveOnBlur?: boolean
+  inputRef?: (el: HTMLElement | null) => void
+  onEnter?: () => void
   onChange: (value: string[], commit?: boolean) => void
   onCommit: () => void
 }) {
@@ -624,11 +716,18 @@ function GridCell({
     case 'boolean':
       return (
         <input
+          ref={inputRef as (el: HTMLInputElement | null) => void}
           type="checkbox"
           className="mx-2 size-4 accent-primary"
           disabled={disabled}
           checked={first === 'true'}
           onChange={(e) => onChange([e.target.checked ? 'true' : 'false'], true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onEnter?.()
+            }
+          }}
         />
       )
     case 'select':
@@ -638,7 +737,17 @@ function GridCell({
           value={first === '' ? NONE : first}
           onValueChange={(v) => onChange(v === NONE ? [] : [v], true)}
         >
-          <SelectTrigger size="sm" className="w-full border-transparent bg-transparent shadow-none hover:bg-muted focus:bg-card">
+          <SelectTrigger
+            ref={inputRef as (el: HTMLButtonElement | null) => void}
+            size="sm"
+            className="w-full border-transparent bg-transparent shadow-none hover:bg-muted focus:bg-card"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                onEnter?.()
+              }
+            }}
+          >
             <SelectValue placeholder={placeholder ?? '—'} />
           </SelectTrigger>
           <SelectContent>
@@ -655,7 +764,16 @@ function GridCell({
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild disabled={disabled}>
-            <button className="w-full truncate rounded px-2 py-1.5 text-left text-sm hover:bg-muted">
+            <button
+              ref={inputRef as (el: HTMLButtonElement | null) => void}
+              className="w-full truncate rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  onEnter?.()
+                }
+              }}
+            >
               {value.length ? value.join(', ') : <span className="text-muted-foreground">{placeholder ?? '—'}</span>}
             </button>
           </DropdownMenuTrigger>
@@ -678,16 +796,19 @@ function GridCell({
     case 'number':
       return (
         <CellInput type="number" value={first} disabled={disabled} placeholder={placeholder}
+          saveOnBlur={saveOnBlur} inputRef={inputRef} onEnter={onEnter}
           onChange={setFirst} onCommit={onCommit} />
       )
     case 'date':
       return (
         <CellInput type="date" value={first} disabled={disabled} placeholder={placeholder}
+          saveOnBlur={saveOnBlur} inputRef={inputRef} onEnter={onEnter}
           onChange={setFirst} onCommit={onCommit} />
       )
     default:
       return (
         <CellInput type="text" value={first} disabled={disabled} placeholder={placeholder}
+          saveOnBlur={saveOnBlur} inputRef={inputRef} onEnter={onEnter}
           onChange={setFirst} onCommit={onCommit} />
       )
   }
@@ -789,6 +910,9 @@ function CellInput({
   value,
   disabled,
   placeholder,
+  saveOnBlur,
+  inputRef,
+  onEnter,
   onChange,
   onCommit,
 }: {
@@ -796,19 +920,27 @@ function CellInput({
   value: string
   disabled?: boolean
   placeholder?: string
+  saveOnBlur?: boolean
+  inputRef?: (el: HTMLElement | null) => void
+  onEnter?: () => void
   onChange: (v: string) => void
   onCommit: () => void
 }) {
   return (
     <Input
+      ref={inputRef as (el: HTMLInputElement | null) => void}
       type={type}
       value={value}
       disabled={disabled}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      onBlur={onCommit}
+      onBlur={saveOnBlur ? onCommit : undefined}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          if (onEnter) onEnter()
+          else onCommit()
+        }
       }}
       className="h-8 border-transparent bg-transparent shadow-none hover:bg-muted focus-visible:bg-card focus-visible:ring-1"
     />

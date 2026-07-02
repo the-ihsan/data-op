@@ -241,9 +241,12 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   Members, Settings, AnalyticsPanel, `DynamicForm` (form engine; applies `default_value`
   when empty), and `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style
- grid** (shadcn `Table`) with one editable cell per field. Cells save on blur/Enter
- via `recordApi.saveValues` (per-record, current stage). Required-field validation only
- fires on advance, so cells edit freely even with no data.
+ grid** (shadcn `Table`) with one editable cell per field. Existing rows save on **blur**
+ (and Enter on the last field); the draft add-row only saves on Enter in the last field.
+ Enter on earlier fields moves focus forward. Select/boolean/multiselect save immediately
+ on change. Unsaved rows show a dashed amber border around the whole row; saving/saved/error
+ use solid row borders.
+ Required-field validation only fires on advance, so cells edit freely even with no data.
  - **Inherited cells** (`prev_stage_key` set) are read-only in the grid (muted text,
  tooltip) since their values are seeded on advance.
  - **Repeatable fields** (`max_count` 0 or > 1, scalar types) use `MultiEntryCell`: a
@@ -262,8 +265,8 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  `GET /records/{record}/history` (loaded lazily when the modal opens via React Query
  key `['record-history', campaignId, recordId]`) and renders a vertical timeline of
  transitions: user name + username, stage move label, optional note, timestamp.
- - A permanent **empty add-row** at the bottom of the **first** stage; committing any
- cell creates a record (`recordApi.create`) then saves the values. If the value save
+ - A permanent **empty add-row** at the bottom of the **first** stage; pressing Enter on
+ the last field creates a record (`recordApi.create`) then saves the values. If the value save
  fails the just-created record is **rolled back** (deleted) and the draft is kept so
  the user can fix it — no orphan empty rows. After a successful create, the grid
  navigates to the last page so the new row is immediately visible.
@@ -274,9 +277,8 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
      content. After import shows succeeded/failed summary; failed entries listed with
      1-based line number, original value, and error; "Edit failed entries" re-populates
      textarea with only the failed lines for retry.
-   - **"My data" / "All data"** toggle sends `?mine=true`; backend returns records where `created_by = uid` OR the user appears in any `RecordTransition` for that record (`moved_by = uid`), i.e. records touched at any stage. Defaults to My data.
-  - "Edit fields" button switches to the Stages tab (`onEditStage`) — columns are
-    editable before any records exist.
+   - **"My data" / "All data"** filter (`Select` in toolbar) sends `?mine=true`; backend returns records where `created_by = uid` OR the user appears in any `RecordTransition` for that record (`moved_by = uid`), i.e. records touched at any stage. Defaults to My data. Status filter is also a `Select` (all / open / processing).
+  - Empty stage (no fields) shows an **Add fields** button that switches to the Stages tab.
   - `components/ui/` holds shadcn primitives (button, badge, table, input, select,
     dropdown-menu, popover, dialog, sheet); `components.json` configures the shadcn CLI.
 

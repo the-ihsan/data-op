@@ -42,7 +42,7 @@ export default function CampaignDetail() {
 
       {tab === 'records' && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <StageTimeline campaign={campaign} onEditStage={() => setTab('stages')} />
+          <StageTimeline campaign={campaign} onAddFields={() => setTab('stages')} />
         </div>
       )}
       {tab !== 'records' && (
