@@ -1,4 +1,4 @@
-import { parseOptions, type StageField } from '../api/types'
+import { facebookUrlPlaceholder, parseOptions, type StageField } from '../api/types'
 
 export type FormValues = Record<string, string[]>
 
@@ -126,6 +126,18 @@ function SingleInput({
       return <input type="number" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
     case 'date':
       return <input type="date" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+    case 'facebook_profile':
+    case 'facebook_group':
+    case 'facebook_page':
+      return (
+        <input
+          type="url"
+          value={value}
+          disabled={disabled}
+          placeholder={facebookUrlPlaceholder(field.type)}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
     case 'boolean':
       return (
         <label className="inline">

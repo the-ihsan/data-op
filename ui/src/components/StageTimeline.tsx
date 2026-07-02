@@ -31,7 +31,7 @@ import {
   X,
 } from 'lucide-react'
 import { recordApi, stageApi } from '../api/resources'
-import { parseOptions, type BulkImportResult, type Campaign, type RecordRow, type RecordTransitionEntry, type Stage, type StageField } from '../api/types'
+import { facebookUrlPlaceholder, isFacebookUrlField, parseOptions, type BulkImportResult, type Campaign, type RecordRow, type RecordTransitionEntry, type Stage, type StageField } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -684,6 +684,19 @@ function GridCell({
         <CellInput type="date" value={first} disabled={disabled} placeholder={placeholder}
           onChange={setFirst} onCommit={onCommit} />
       )
+    case 'facebook_profile':
+    case 'facebook_group':
+    case 'facebook_page':
+      return (
+        <CellInput
+          type="url"
+          value={first}
+          disabled={disabled}
+          placeholder={placeholder ?? facebookUrlPlaceholder(field.type)}
+          onChange={setFirst}
+          onCommit={onCommit}
+        />
+      )
     default:
       return (
         <CellInput type="text" value={first} disabled={disabled} placeholder={placeholder}
@@ -711,7 +724,8 @@ function MultiEntryCell({
 }) {
   const [open, setOpen] = useState(false)
   const entries = value.length > 0 ? value : ['']
-  const inputType = field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'
+  const inputType =
+    field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : isFacebookUrlField(field.type) ? 'url' : 'text'
   const limit = field.max_count // 0 = unlimited
   const canAdd = limit === 0 || entries.length < limit
   const filled = value.filter((v) => v.trim() !== '')

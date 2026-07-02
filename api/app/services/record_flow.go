@@ -89,6 +89,24 @@ func normalizeField(field models.StageField, raw []string) ([]string, error) {
 			if !options[v] {
 				return nil, ErrValidation{fmt.Sprintf("'%s' is not a valid option for field '%s'", v, field.Label)}
 			}
+		case models.FieldTypeFacebookProfile:
+			normalized, err := normalizeFacebookProfile(v)
+			if err != nil {
+				return nil, ErrValidation{fmt.Sprintf("field '%s' must be a valid Facebook profile URL or username", field.Label)}
+			}
+			v = normalized
+		case models.FieldTypeFacebookGroup:
+			normalized, err := normalizeFacebookGroup(v)
+			if err != nil {
+				return nil, ErrValidation{fmt.Sprintf("field '%s' must be a valid Facebook group URL or slug", field.Label)}
+			}
+			v = normalized
+		case models.FieldTypeFacebookPage:
+			normalized, err := normalizeFacebookPage(v)
+			if err != nil {
+				return nil, ErrValidation{fmt.Sprintf("field '%s' must be a valid Facebook page URL or slug", field.Label)}
+			}
+			v = normalized
 		}
 		out = append(out, v)
 	}

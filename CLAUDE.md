@@ -113,7 +113,9 @@ a unique `email` at Intake).
   **owner or manager** (`services.CanManage`): stage/field/constraint structure.
   Record data actions use add/edit/delete via `services.Authorize`.
 - **Stage** — ordered by `position` (0-based) within a campaign.
-- **StageField** — `type` ∈ text|textarea|number|date|boolean|select|multiselect;
+- **StageField** — `type` ∈ text|textarea|number|date|boolean|select|multiselect|facebook_profile|facebook_group|facebook_page;
+  Facebook URL types are validated and canonicalized on the backend (`services/normalizeFacebookProfile`,
+  `normalizeFacebookGroup`, `normalizeFacebookPage`) so URL variants dedupe for uniqueness.
   `required`, `is_unique`, `max_count` (0 = unlimited repeatable entries; select forced
   to 1), `options` (JSON array string, choice types only), `prev_stage_key` (key of a
   field in the immediately-previous stage whose value seeds this field), `position`.

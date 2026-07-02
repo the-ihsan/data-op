@@ -11,18 +11,24 @@ const (
 	FieldTypeDate        = "date"
 	FieldTypeBoolean     = "boolean"
 	FieldTypeSelect      = "select"
-	FieldTypeMultiSelect = "multiselect"
+	FieldTypeMultiSelect     = "multiselect"
+	FieldTypeFacebookProfile = "facebook_profile"
+	FieldTypeFacebookGroup   = "facebook_group"
+	FieldTypeFacebookPage    = "facebook_page"
 )
 
 // ValidFieldTypes is the set of field types supported by the form builder in v1.
 var ValidFieldTypes = map[string]bool{
-	FieldTypeText:        true,
-	FieldTypeTextarea:    true,
-	FieldTypeNumber:      true,
-	FieldTypeDate:        true,
-	FieldTypeBoolean:     true,
-	FieldTypeSelect:      true,
-	FieldTypeMultiSelect: true,
+	FieldTypeText:            true,
+	FieldTypeTextarea:        true,
+	FieldTypeNumber:          true,
+	FieldTypeDate:            true,
+	FieldTypeBoolean:         true,
+	FieldTypeSelect:          true,
+	FieldTypeMultiSelect:     true,
+	FieldTypeFacebookProfile: true,
+	FieldTypeFacebookGroup:   true,
+	FieldTypeFacebookPage:    true,
 }
 
 // IsChoiceType reports whether the field type requires a defined option list.

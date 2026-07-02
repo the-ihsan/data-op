@@ -3,7 +3,31 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { constraintApi, fieldApi, stageApi, type FieldInput } from '../api/resources'
 import { parseFieldKeys, parseOptions, type FieldType, type Stage } from '../api/types'
 
-const FIELD_TYPES: FieldType[] = ['text', 'textarea', 'number', 'date', 'boolean', 'select', 'multiselect']
+const FIELD_TYPES: FieldType[] = [
+  'text',
+  'textarea',
+  'number',
+  'date',
+  'boolean',
+  'select',
+  'multiselect',
+  'facebook_profile',
+  'facebook_group',
+  'facebook_page',
+]
+
+function fieldTypeLabel(t: FieldType): string {
+  switch (t) {
+    case 'facebook_profile':
+      return 'facebook profile'
+    case 'facebook_group':
+      return 'facebook group'
+    case 'facebook_page':
+      return 'facebook page'
+    default:
+      return t
+  }
+}
 
 export default function StageBuilder({ campaignId }: { campaignId: number }) {
   const qc = useQueryClient()
@@ -119,7 +143,7 @@ function StagePanel({
               <td>
                 <code>{f.key}</code>
               </td>
-              <td>{f.type}</td>
+              <td>{fieldTypeLabel(f.type)}</td>
               <td>
                 <div className="row wrap" style={{ gap: '0.3rem' }}>
                   {f.required && <span className="tag req">required</span>}
@@ -242,7 +266,7 @@ function FieldForm({
           <select value={type} onChange={(e) => setType(e.target.value as FieldType)}>
             {FIELD_TYPES.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {fieldTypeLabel(t)}
               </option>
             ))}
           </select>
