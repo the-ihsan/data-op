@@ -161,18 +161,23 @@ a unique `email` at Intake).
 - `app/models/` — models embed `github.com/goravel/framework/database/orm` `orm.Model`
   (and `orm.SoftDeletes` on users/campaigns). Timestamps are `*carbon.DateTime`.
 - `app/http/controllers/` — thin controllers returning `http.Response`. Shared helpers
-  in `helpers.go`: `currentUserID(ctx)`, `ok/created/badRequest/unauthorized/forbidden/
-  notFound/conflict/serverError`. Response envelope is `{ "data": ... }` (errors:
-  `{ "error": msg }`). Route-param loaders: `loadCampaign`, `loadStage`, `loadRecord`.
+ in `helpers.go`: `currentUserID(ctx)`, `ok/created/badRequest/unauthorized/forbidden/
+ notFound/conflict/serverError`, plus error mappers `validationOrServerError(ctx, err)`
+ (ErrValidation → 400, else 500) and `validationMessage(err)` (message string for
+ per-line bulk failures). Response envelope is `{ "data": ... }` (errors:
+ `{ "error": msg }`). Route-param loaders: `loadCampaign`, `loadStage`, `loadRecord`.
 - `app/http/middleware/auth.go` — `Auth()` validates JWT (`facades.Auth(ctx).Parse`).
 - `app/services/` — business logic:
   - `access.go` — RBAC: `Membership`, `CanView`, `CanManage`, `Authorize(perm)`.
   - `uniqueness.go` — `EnforceUniqueness(tx, recordID, stageID, valuesByKey)` +
     `targetHash` (unit-tested).
-  - `record_flow.go` — `StoreValues` (sanitize → validate/normalize → persist; takes
-    the stage's `sanitize_entry` script as its last arg), `ValidateRequired`,
-    `Advance` (transactional: validate → transition → seed inherited → advance/finish),
-    `LoadValuesByKey`, `StageFields`, `ErrValidation`/`ErrUniquenessConflict`, `Now()`.
+ - `record_flow.go` — `NormalizeStageValues` (sanitize + normalize, no DB),
+ `PersistStageValues`, `PrepareStageValues` (normalize + required check — the single
+ pre-write entry point controllers use), `StoreValues` (normalize then persist; takes
+ the stage's `sanitize_entry` script as its last arg), `ValidateRequired`,
+ `Advance` (transactional: validate → transition → seed inherited → advance/finish),
+ `LoadValuesByKey`, `StageFields`, `ErrValidation`/`ErrUniquenessConflict`, `Now()`.
+ Normalization/validation are unit-tested in `record_flow_test.go` (pure, no DB).
   - `sanitize.go` — thin wrapper over `services/starlark` for stage `sanitize_entry`
     scripts: `RunSanitize(script, valuesByKey)` + `ValidateSanitizeScript(script)`
     (unit-tested). Rejections/script errors map to `ErrValidation`.
@@ -252,14 +257,28 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   Field order: `sortStageFields()` in `src/lib/stageFields.ts` (UI); `services.SortStageFields` + `StageFields()` order by `position ASC` (API).
   Members (`components/Members.tsx`) — search users via `GET /users/search`, multi-select
   chips, add several at once with shared role/perms; Settings, AnalyticsPanel, `DynamicForm` (form engine; applies `default_value`
-  when empty), and `StageTimeline` — the new records UX (replaced the old `RecordBoard` kanban):
+  when empty), and the **stage-timeline module** (`components/stage-timeline/`, default
+ export `StageTimeline` from `index.tsx`; replaced the old single-file
+ `StageTimeline.tsx` and, before that, the `RecordBoard` kanban). Files: `index.tsx`
+ (timeline + toolbar), `StageGrid.tsx`, `GridRow.tsx`, `DraftRow.tsx`, `cells.tsx`
+ (`GridCell`/`MultiEntryCell`/`CellInput`/`CellTextarea`), `RowActionsMenu.tsx`,
+ `RecordDetailsModal.tsx`, `BulkImportModal.tsx`, `StatusBadge.tsx`, and `helpers.ts`
+ (`CellValues`, `valuesForStage`, `missingRequiredError`, `rowSaveStateClass`,
+ `focusNextEditableField`, `PER_PAGE`). The records UX:
  - Horizontal **stage timeline**; clicking a stage shows its records in an **Excel-style
  grid** (shadcn `Table`) with one editable cell per field. Existing rows save on **blur**
  (and Enter on the last field); the draft add-row only saves on Enter in the last field.
  Enter on earlier fields moves focus forward. Select/boolean/multiselect save immediately
- on change. Unsaved rows show a dashed amber border around the whole row; saving/saved/error
+ on change. `textarea` fields render as multi-line cells (Enter inserts a newline; blur
+ saves). Unsaved rows show a dashed amber border around the whole row; saving/saved/error
  use solid row borders.
- Required-field validation only fires on advance, so cells edit freely even with no data.
+ Required-field validation applies to record **creation** and **advance** only —
+ partial data saves fine on an already-created record at its current stage. The draft
+ add-row pre-checks required fields client-side (`missingRequiredError`, same message
+ as the backend) before creating, and stays a silent no-op while completely empty.
+ Advance saves any unsaved row edits first (partial ok), then blocks client-side if
+ required fields are missing; the backend re-checks on advance either way, including
+ inherited (`prev_stage_key`) fields.
  - **Inherited cells** (`prev_stage_key` set) are read-only in the grid (muted text,
  tooltip) since their values are seeded on advance.
  - **Repeatable fields** (`max_count` 0 or > 1, scalar types) use `MultiEntryCell`: a
@@ -329,13 +348,19 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   migration file needs `migrate:fresh` (dev) to take effect.
 - Uniqueness is enforced in a **transaction**: `StoreValues` then `EnforceUniqueness`;
   a conflict returns `ErrUniquenessConflict` to force rollback → controller responds 409.
+- **Required fields** are enforced on record **creation** (bulk import, via
+ `PrepareStageValues`) and on **advance** (`services.Advance` → `ValidateRequired`),
+ including inherited (`prev_stage_key`) fields. They are deliberately NOT enforced on
+ plain value saves (`PUT …/values` uses `NormalizeStageValues` only) so partial data
+ can be saved while a record sits at a stage.
 - Testing tip: when shell-scripting curl with a bearer token, **quote the whole header**
  (`-H "Authorization: Bearer $TOK"`) — an unquoted var splits on the space.
- - **StageTimeline pagination**: `StageGrid` fetches records per-stage with `?stage=`,
- `?mine=`, `?page=`, `?per_page=50`. Toolbar badge shows live total via `onTotalChange`
- callback. Stage pills no longer show per-stage counts. Pagination footer appears when
- `totalPages > 1`. `PER_PAGE = 50` constant at module level.
-- `StageTimeline.tsx` once contained **corrupted bytes** (NUL / control chars where
- `…`, `—`, `“”` and a lock glyph should be), which made ripgrep treat the file as
+ - **StageTimeline pagination**: `stage-timeline/StageGrid.tsx` fetches records
+ per-stage with `?stage=`, `?mine=`, `?page=`, `?per_page=50`. Toolbar badge shows live
+ total via `onTotalChange` callback. Stage pills no longer show per-stage counts.
+ Pagination footer appears when `totalPages > 1`. `PER_PAGE = 50` lives in
+ `stage-timeline/helpers.ts`.
+- The old `StageTimeline.tsx` once contained **corrupted bytes** (NUL / control chars
+ where `…`, `—`, `“”` and a lock glyph should be), which made ripgrep treat the file as
  binary and silently return no matches. If a grep on a UI file unexpectedly finds
  nothing, check for control bytes (`grep -nP '[\x00-\x1F]'`).

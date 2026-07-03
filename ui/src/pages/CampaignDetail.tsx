@@ -5,7 +5,7 @@ import type { Campaign } from '../api/types'
 import CampaignNav from '../components/CampaignNav'
 import StageBuilder from '../components/StageBuilder'
 import Members from '../components/Members'
-import StageTimeline from '../components/StageTimeline'
+import StageTimeline from '../components/stage-timeline'
 import AnalyticsPanel from '../components/AnalyticsPanel'
 import Settings from '../components/Settings'
 

@@ -239,10 +239,7 @@ func (r *RecordController) Advance(ctx http.Context) http.Response {
 
 	label, err := services.Advance(record, uid, body.Note)
 	if err != nil {
-		if v, ok := err.(services.ErrValidation); ok {
-			return badRequest(ctx, v.Message)
-		}
-		return serverError(ctx, err)
+		return validationOrServerError(ctx, err)
 	}
 	if label != "" {
 		return conflict(ctx, "a record with the same value already exists for: "+label)
@@ -418,6 +415,12 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 			continue
 		}
 
+		valuesByKey, prepErr := services.PrepareStageValues(fields, rawValues, firstStage.SanitizeEntry)
+		if prepErr != nil {
+			failed = append(failed, FailedEntry{Index: i, Error: validationMessage(prepErr)})
+			continue
+		}
+
 		txErr := facades.Orm().Transaction(func(tx orm.Query) error {
 			record := models.Record{
 				CampaignID:     campaign.ID,
@@ -437,11 +440,7 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 			if err := tx.Create(&transition); err != nil {
 				return err
 			}
-			valuesByKey, err := services.StoreValues(tx, record.ID, firstStage.ID, fields, rawValues, firstStage.SanitizeEntry)
-			if err != nil {
-				return err
-			}
-			if err := services.ValidateRequired(fields, valuesByKey); err != nil {
+			if err := services.PersistStageValues(tx, record.ID, firstStage.ID, fields, valuesByKey); err != nil {
 				return err
 			}
 			label, err := checker.Enforce(tx, record.ID, valuesByKey)
@@ -455,15 +454,12 @@ func (r *RecordController) BulkImport(ctx http.Context) http.Response {
 		})
 
 		if txErr != nil {
-			msg := "internal error"
-			var ve services.ErrValidation
 			var uc services.ErrUniquenessConflict
-			if errors.As(txErr, &ve) {
-				msg = ve.Message
-			} else if errors.As(txErr, &uc) {
-				msg = "duplicate value: " + uc.Label
+			if errors.As(txErr, &uc) {
+				failed = append(failed, FailedEntry{Index: i, Error: "duplicate value: " + uc.Label})
+			} else {
+				failed = append(failed, FailedEntry{Index: i, Error: validationMessage(txErr)})
 			}
-			failed = append(failed, FailedEntry{Index: i, Error: msg})
 		} else {
 			succeeded++
 		}

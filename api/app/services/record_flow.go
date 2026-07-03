@@ -118,18 +118,15 @@ func normalizeBool(v string) string {
 	}
 }
 
-// StoreValues validates and persists a record's values at a stage, replacing any
-// existing values, and returns the normalized values grouped by field key.
-// When sanitizeScript is non-empty the stage's Starlark sanitize function runs
-// on the submitted values first (see sanitize.go); it may rewrite values or
-// reject the entry with an ErrValidation.
-func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageField, raw map[string][]string, sanitizeScript string) (map[string][]string, error) {
+// NormalizeStageValues sanitizes and normalizes submitted values without touching
+// the database. When sanitizeScript is non-empty the stage's Starlark sanitize
+// function runs first (see sanitize.go).
+func NormalizeStageValues(fields []models.StageField, raw map[string][]string, sanitizeScript string) (map[string][]string, error) {
 	fieldByKey := map[string]models.StageField{}
 	for _, f := range fields {
 		fieldByKey[f.Key] = f
 	}
 
-	// Reject unknown keys early.
 	for key := range raw {
 		if _, ok := fieldByKey[key]; !ok {
 			return nil, ErrValidation{fmt.Sprintf("unknown field '%s' for this stage", key)}
@@ -150,20 +147,31 @@ func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageFiel
 	}
 
 	valuesByKey := map[string][]string{}
-	if _, err := tx.Where("record_id", recordID).Where("stage_id", stageID).Delete(&models.RecordValue{}); err != nil {
-		return nil, err
-	}
-
-	var rows []models.RecordValue
 	for _, field := range fields {
 		entries, err := normalizeField(field, raw[field.Key])
 		if err != nil {
 			return nil, err
 		}
+		if len(entries) > 0 {
+			valuesByKey[field.Key] = entries
+		}
+	}
+	return valuesByKey, nil
+}
+
+// PersistStageValues replaces a record's stored values at a stage with a
+// pre-normalized valuesByKey map.
+func PersistStageValues(tx orm.Query, recordID, stageID uint, fields []models.StageField, valuesByKey map[string][]string) error {
+	if _, err := tx.Where("record_id", recordID).Where("stage_id", stageID).Delete(&models.RecordValue{}); err != nil {
+		return err
+	}
+
+	var rows []models.RecordValue
+	for _, field := range fields {
+		entries := valuesByKey[field.Key]
 		if len(entries) == 0 {
 			continue
 		}
-		valuesByKey[field.Key] = entries
 		for i, v := range entries {
 			rows = append(rows, models.RecordValue{
 				RecordID:   recordID,
@@ -176,9 +184,38 @@ func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageFiel
 		}
 	}
 	if len(rows) > 0 {
-		if err := tx.Create(&rows); err != nil {
-			return nil, err
-		}
+		return tx.Create(&rows)
+	}
+	return nil
+}
+
+// StoreValues validates and persists a record's values at a stage, replacing any
+// existing values, and returns the normalized values grouped by field key.
+// When sanitizeScript is non-empty the stage's Starlark sanitize function runs
+// on the submitted values first (see sanitize.go); it may rewrite values or
+// reject the entry with an ErrValidation.
+func StoreValues(tx orm.Query, recordID, stageID uint, fields []models.StageField, raw map[string][]string, sanitizeScript string) (map[string][]string, error) {
+	valuesByKey, err := NormalizeStageValues(fields, raw, sanitizeScript)
+	if err != nil {
+		return nil, err
+	}
+	if err := PersistStageValues(tx, recordID, stageID, fields, valuesByKey); err != nil {
+		return nil, err
+	}
+	return valuesByKey, nil
+}
+
+// PrepareStageValues normalizes submitted values and enforces required fields,
+// returning values ready to persist. Used by record-creation paths (bulk import);
+// plain value saves on an existing record use NormalizeStageValues alone so
+// partial data can be saved while a record sits at a stage.
+func PrepareStageValues(fields []models.StageField, raw map[string][]string, sanitizeScript string) (map[string][]string, error) {
+	valuesByKey, err := NormalizeStageValues(fields, raw, sanitizeScript)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateRequired(fields, valuesByKey); err != nil {
+		return nil, err
 	}
 	return valuesByKey, nil
 }

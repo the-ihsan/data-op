@@ -1,10 +1,13 @@
 package controllers
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/goravel/framework/contracts/http"
 	"github.com/goravel/framework/facades"
+
+	"goravel/app/services"
 )
 
 // currentUserID returns the authenticated user's id from the JWT guard.
@@ -51,4 +54,24 @@ func conflict(ctx http.Context, msg string) http.Response {
 func serverError(ctx http.Context, err error) http.Response {
 	facades.Log().Error(err)
 	return ctx.Response().Json(http.StatusInternalServerError, http.Json{"error": "internal server error"})
+}
+
+// validationOrServerError maps a services.ErrValidation to a 400 with its
+// message, and anything else to a 500.
+func validationOrServerError(ctx http.Context, err error) http.Response {
+	var v services.ErrValidation
+	if errors.As(err, &v) {
+		return badRequest(ctx, v.Message)
+	}
+	return serverError(ctx, err)
+}
+
+// validationMessage extracts the user-facing message from a services.ErrValidation,
+// falling back to a generic label for unexpected errors.
+func validationMessage(err error) string {
+	var v services.ErrValidation
+	if errors.As(err, &v) {
+		return v.Message
+	}
+	return "internal error"
 }

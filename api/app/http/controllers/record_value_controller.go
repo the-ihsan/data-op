@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"errors"
-
 	"github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/contracts/http"
 	"github.com/goravel/framework/facades"
@@ -54,7 +52,9 @@ type saveValuesRequest struct {
 }
 
 // Update saves the record's values for its current stage, enforcing type, option,
-// max_count and stage-level uniqueness rules.
+// max_count and stage-level uniqueness rules. Required fields are deliberately NOT
+// enforced here: partial data may be saved while a record sits at a stage; required
+// fields are checked on record creation (bulk import) and on advance.
 func (r *RecordValueController) Update(ctx http.Context) http.Response {
 	record, campaign, resp := loadRecord(ctx)
 	if resp != nil {
@@ -88,10 +88,14 @@ func (r *RecordValueController) Update(ctx http.Context) http.Response {
 		return serverError(ctx, err)
 	}
 
+	valuesByKey, err := services.NormalizeStageValues(fields, req.Values, stage.SanitizeEntry)
+	if err != nil {
+		return validationOrServerError(ctx, err)
+	}
+
 	var conflictLabel string
 	txErr := facades.Orm().Transaction(func(tx orm.Query) error {
-		valuesByKey, err := services.StoreValues(tx, record.ID, record.CurrentStageID, fields, req.Values, stage.SanitizeEntry)
-		if err != nil {
+		if err := services.PersistStageValues(tx, record.ID, record.CurrentStageID, fields, valuesByKey); err != nil {
 			return err
 		}
 		label, err := services.EnforceUniqueness(tx, record.ID, record.CurrentStageID, valuesByKey)
@@ -105,14 +109,10 @@ func (r *RecordValueController) Update(ctx http.Context) http.Response {
 		return nil
 	})
 	if txErr != nil {
-		var v services.ErrValidation
-		if errors.As(txErr, &v) {
-			return badRequest(ctx, v.Message)
-		}
 		if conflictLabel != "" {
 			return conflict(ctx, "a record with the same value already exists for: "+conflictLabel)
 		}
-		return serverError(ctx, txErr)
+		return validationOrServerError(ctx, txErr)
 	}
 
 	values, err := services.LoadValuesByKey(facades.Orm().Query(), record.ID, record.CurrentStageID)
