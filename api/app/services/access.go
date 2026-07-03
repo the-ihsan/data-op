@@ -13,7 +13,7 @@ const (
 	PermAdd    = "add"
 	PermEdit   = "edit"
 	PermDelete = "delete"
-	PermManage = "manage" // owner-only: settings, members, stage definitions
+	PermManage = "manage" // owner-only: campaign settings (members use CanManage)
 )
 
 var (

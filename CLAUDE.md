@@ -113,9 +113,10 @@ a unique `email` at Intake).
     users are blocked (409) from writing/advancing until release or advance.
   - `true` → concurrent edits allowed, last-write-wins; status is advisory.
 - **CampaignMember** — RBAC pivot. `role` owner|manager|member + `can_add`/`can_edit`/
-  `can_delete`. Owner = full control; **owner-only**: settings, member management.
-  **owner or manager** (`services.CanManage`): stage/field/constraint structure.
-  Record data actions use add/edit/delete via `services.Authorize`.
+  `can_delete`. Owner = full control; **owner-only**: campaign settings (delete campaign,
+  visibility/status). **Owner or manager** (`services.CanManage`): member add/remove/update,
+  stage/field/constraint structure. Record data actions use add/edit/delete via
+  `services.Authorize`.
 - **Stage** — ordered by `position` (0-based) within a campaign. Optional
   `sanitize_entry` (nullable text): a **Starlark script that must define
   `sanitize(data)`**; it runs (sandboxed, via `go.starlark.net`) on every value save /
@@ -137,10 +138,13 @@ a unique `email` at Intake).
   (optional pre-fill for new entries at this stage), `position` (0-based order within the
   stage; new fields append at the end; reorder via the fields/reorder API). Stages list API also
   annotates each field with `value_count` (stored record values) for safe editing in the UI.
-  Field updates reject changes that would orphan data: type/key/inheritance locked when
-  `value_count > 0`; `max_count` cannot drop below peak per-record usage; choice options
-  in use cannot be removed. Inherited fields (`prev_stage_key` set) must keep the same
-  label and type as the referenced previous-stage field.
+  Field updates reject changes that would orphan data: key/inheritance locked when
+  `value_count > 0`; with stored data, type may only change to `text` or `textarea`
+  (all stored values are strings); `max_count` cannot drop below peak per-record usage;
+  choice options in use cannot be removed. Inherited fields (`prev_stage_key` set) must
+  keep the same label and type as the referenced previous-stage field. On value save,
+  keys not on the stage schema are silently dropped; inherited field values are
+  preserved from the DB (only `Advance` → `seedInheritedValues` writes them).
 - **StageUniqueConstraint** — composite uniqueness: `field_keys` (JSON array string).
 - **Record** — `current_stage_id`, `status` (open|processing|finished), `locked_by`,
   `created_by`.
@@ -171,8 +175,9 @@ a unique `email` at Intake).
   - `access.go` — RBAC: `Membership`, `CanView`, `CanManage`, `Authorize(perm)`.
   - `uniqueness.go` — `EnforceUniqueness(tx, recordID, stageID, valuesByKey)` +
     `targetHash` (unit-tested).
- - `record_flow.go` — `NormalizeStageValues` (sanitize + normalize, no DB),
- `PersistStageValues`, `PrepareStageValues` (normalize + required check — the single
+ - `record_flow.go` — `NormalizeStageValues` (sanitize + normalize, no DB; drops
+ unknown keys), `PersistStageValues` (preserves inherited `prev_stage_key` values on
+ partial saves), `PrepareStageValues` (normalize + required check — the single
  pre-write entry point controllers use), `StoreValues` (normalize then persist; takes
  the stage's `sanitize_entry` script as its last arg), `ValidateRequired`,
  `Advance` (transactional: validate → transition → seed inherited → advance/finish),

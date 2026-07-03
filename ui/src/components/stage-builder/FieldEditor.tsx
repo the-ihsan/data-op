@@ -39,7 +39,13 @@ export default function FieldEditor({
   const inherited = state.prevKey !== ''
   const hasData = (existing?.value_count ?? 0) > 0
   const isChoice = state.type === 'select' || state.type === 'multiselect'
-  const lockIdentity = inherited || hasData
+  const typeSelectDisabled = inherited
+  // With stored data the backend only accepts converting to a string type
+  // (text/textarea); keep the current type selectable so it still renders.
+  const typeOptions =
+    hasData && !inherited
+      ? FIELD_TYPES.filter((t) => t === 'text' || t === 'textarea' || t === existing?.type)
+      : FIELD_TYPES
 
   const prevFields = sortStageFields(prevStage?.fields)
 
@@ -134,21 +140,26 @@ export default function FieldEditor({
           <Select
             value={state.type}
             onValueChange={(v) => set('type', v as FieldType)}
-            disabled={lockIdentity}
+            disabled={typeSelectDisabled}
           >
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {FIELD_TYPES.map((t) => (
+              {typeOptions.map((t) => (
                 <SelectItem key={t} value={t}>
                   {FIELD_TYPE_LABELS[t]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {hasData && (
-            <p className="text-xs text-muted-foreground">Type cannot be changed while data exists.</p>
+          {hasData && !inherited && (
+            <p className="text-xs text-muted-foreground">
+              When data exists, type can only be changed to Text or Long text.
+            </p>
+          )}
+          {inherited && (
+            <p className="text-xs text-muted-foreground">Type is fixed for inherited fields.</p>
           )}
         </div>
 

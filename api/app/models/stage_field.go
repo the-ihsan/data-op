@@ -30,6 +30,11 @@ func IsChoiceType(t string) bool {
 	return t == FieldTypeSelect || t == FieldTypeMultiSelect
 }
 
+// IsStringFieldType reports whether stored values are plain strings (text/textarea).
+func IsStringFieldType(t string) bool {
+	return t == FieldTypeText || t == FieldTypeTextarea
+}
+
 type StageField struct {
 	orm.Model
 	StageID       uint   `json:"stage_id" gorm:"index"`

@@ -305,8 +305,8 @@ func (r *StageFieldController) validateFieldUpdatePreservation(ctx http.Context,
 	if key == "" {
 		key = slugify(strings.TrimSpace(req.Label))
 	}
-	if req.Type != existing.Type {
-		return conflict(ctx, "cannot change field type while records contain data for this field")
+	if req.Type != existing.Type && !models.IsStringFieldType(req.Type) {
+		return conflict(ctx, "when records contain data, the type can only be changed to text or long text")
 	}
 	if key != existing.Key {
 		return conflict(ctx, "cannot change field key while records contain data for this field")

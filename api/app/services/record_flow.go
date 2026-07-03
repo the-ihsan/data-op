@@ -127,23 +127,27 @@ func NormalizeStageValues(fields []models.StageField, raw map[string][]string, s
 		fieldByKey[f.Key] = f
 	}
 
-	for key := range raw {
-		if _, ok := fieldByKey[key]; !ok {
-			return nil, ErrValidation{fmt.Sprintf("unknown field '%s' for this stage", key)}
+	// Drop keys that are not on this stage (e.g. removed fields still in the client payload).
+	filtered := make(map[string][]string, len(raw))
+	for key, vals := range raw {
+		if _, ok := fieldByKey[key]; ok {
+			filtered[key] = vals
 		}
 	}
+	raw = filtered
 
 	if strings.TrimSpace(sanitizeScript) != "" {
 		sanitized, err := RunSanitize(sanitizeScript, raw)
 		if err != nil {
 			return nil, err
 		}
-		for key := range sanitized {
-			if _, ok := fieldByKey[key]; !ok {
-				return nil, ErrValidation{fmt.Sprintf("sanitize script returned unknown field '%s'", key)}
+		filtered = make(map[string][]string, len(sanitized))
+		for key, vals := range sanitized {
+			if _, ok := fieldByKey[key]; ok {
+				filtered[key] = vals
 			}
 		}
-		raw = sanitized
+		raw = filtered
 	}
 
 	valuesByKey := map[string][]string{}
@@ -160,8 +164,25 @@ func NormalizeStageValues(fields []models.StageField, raw map[string][]string, s
 }
 
 // PersistStageValues replaces a record's stored values at a stage with a
-// pre-normalized valuesByKey map.
+// pre-normalized valuesByKey map. Values for inherited fields (prev_stage_key set)
+// are preserved from the database — they are only written by seedInheritedValues on
+// advance, and partial client saves must not wipe them.
 func PersistStageValues(tx orm.Query, recordID, stageID uint, fields []models.StageField, valuesByKey map[string][]string) error {
+	existing, err := LoadValuesByKey(tx, recordID, stageID)
+	if err != nil {
+		return err
+	}
+	for _, field := range fields {
+		if field.PrevStageKey == "" {
+			continue
+		}
+		if vals := existing[field.Key]; len(vals) > 0 {
+			valuesByKey[field.Key] = vals
+		} else {
+			delete(valuesByKey, field.Key)
+		}
+	}
+
 	if _, err := tx.Where("record_id", recordID).Where("stage_id", stageID).Delete(&models.RecordValue{}); err != nil {
 		return err
 	}
@@ -339,8 +360,15 @@ func seedInheritedValues(tx orm.Query, recordID uint, next *models.Stage, prevVa
 		if len(vals) == 0 {
 			continue
 		}
-		seeded[f.Key] = vals
-		for i, v := range vals {
+		normalized, err := normalizeField(f, vals)
+		if err != nil {
+			return err
+		}
+		if len(normalized) == 0 {
+			continue
+		}
+		seeded[f.Key] = normalized
+		for i, v := range normalized {
 			rows = append(rows, models.RecordValue{
 				RecordID:   recordID,
 				StageID:    next.ID,

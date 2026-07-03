@@ -24,15 +24,15 @@ type memberRequest struct {
 	CanDelete bool   `json:"can_delete"`
 }
 
-// requireOwner ensures the caller owns the campaign named in the route.
-func requireOwner(ctx http.Context) (*models.Campaign, http.Response) {
+// requireMemberManager ensures the caller may add/remove/update campaign members
+// (owners and managers). Settings remain owner-only.
+func requireMemberManager(ctx http.Context) (*models.Campaign, http.Response) {
 	campaign, resp := loadCampaign(ctx)
 	if resp != nil {
 		return nil, resp
 	}
-	uid := currentUserID(ctx)
-	if member, err := services.Membership(uid, campaign.ID); err != nil || !member.IsOwner() {
-		return nil, forbidden(ctx, "only the campaign owner can manage members")
+	if !services.CanManage(currentUserID(ctx), campaign.ID) {
+		return nil, forbidden(ctx, "only the campaign owner or a manager can manage members")
 	}
 	return campaign, nil
 }
@@ -58,7 +58,7 @@ func (r *CampaignMemberController) Index(ctx http.Context) http.Response {
 }
 
 func (r *CampaignMemberController) Store(ctx http.Context) http.Response {
-	campaign, resp := requireOwner(ctx)
+	campaign, resp := requireMemberManager(ctx)
 	if resp != nil {
 		return resp
 	}
@@ -66,6 +66,9 @@ func (r *CampaignMemberController) Store(ctx http.Context) http.Response {
 	var req memberRequest
 	if err := ctx.Request().Bind(&req); err != nil {
 		return badRequest(ctx, "invalid request body")
+	}
+	if req.Role == models.RoleOwner {
+		return badRequest(ctx, "the owner role cannot be assigned")
 	}
 	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
 	if req.Username == "" {
@@ -107,7 +110,7 @@ func (r *CampaignMemberController) Store(ctx http.Context) http.Response {
 }
 
 func (r *CampaignMemberController) Update(ctx http.Context) http.Response {
-	campaign, resp := requireOwner(ctx)
+	campaign, resp := requireMemberManager(ctx)
 	if resp != nil {
 		return resp
 	}
@@ -131,6 +134,9 @@ func (r *CampaignMemberController) Update(ctx http.Context) http.Response {
 	if err := ctx.Request().Bind(&req); err != nil {
 		return badRequest(ctx, "invalid request body")
 	}
+	if req.Role == models.RoleOwner {
+		return badRequest(ctx, "the owner role cannot be assigned")
+	}
 	member.Role = normalizeRole(req.Role)
 	member.CanAdd = req.CanAdd
 	member.CanEdit = req.CanEdit
@@ -142,7 +148,7 @@ func (r *CampaignMemberController) Update(ctx http.Context) http.Response {
 }
 
 func (r *CampaignMemberController) Destroy(ctx http.Context) http.Response {
-	campaign, resp := requireOwner(ctx)
+	campaign, resp := requireMemberManager(ctx)
 	if resp != nil {
 		return resp
 	}

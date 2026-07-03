@@ -11,12 +11,17 @@ func textField(key string, required bool) models.StageField {
 	return models.StageField{Key: key, Label: key, Type: models.FieldTypeText, Required: required, MaxCount: 1}
 }
 
-func TestNormalizeStageValuesRejectsUnknownKey(t *testing.T) {
+func TestNormalizeStageValuesDiscardsUnknownKey(t *testing.T) {
 	fields := []models.StageField{textField("name", false)}
-	_, err := NormalizeStageValues(fields, map[string][]string{"bogus": {"x"}}, "")
-	var ve ErrValidation
-	if !errors.As(err, &ve) {
-		t.Fatalf("expected ErrValidation, got %v", err)
+	out, err := NormalizeStageValues(fields, map[string][]string{"name": {"ok"}, "bogus": {"x"}}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out["name"][0] != "ok" {
+		t.Fatalf("expected name value, got %#v", out)
+	}
+	if _, ok := out["bogus"]; ok {
+		t.Fatal("expected unknown key to be discarded")
 	}
 }
 
