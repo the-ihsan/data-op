@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { sortStageFields } from '@/lib/stageFields'
-import { PER_PAGE } from './helpers'
+import { HEARTBEAT_MS, PER_PAGE } from './helpers'
 import { GridRow } from './GridRow'
 import { DraftRow } from './DraftRow'
 
@@ -54,6 +54,12 @@ export function StageGrid({
         per_page: PER_PAGE,
       }),
     placeholderData: (prev) => prev,
+    // Heartbeat: keep the visible page fresh. The query key is scoped to the
+    // selected stage, filters and page, so each poll only fetches the records
+    // currently on screen. Rows merge incoming data without disturbing
+    // in-progress edits (see GridRow).
+    refetchInterval: HEARTBEAT_MS,
+    refetchIntervalInBackground: false,
   })
 
   const records = data?.records ?? []

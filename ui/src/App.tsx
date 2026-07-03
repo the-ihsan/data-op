@@ -11,6 +11,7 @@ import CampaignDetail, {
   CampaignTimeline,
 } from './pages/CampaignDetail'
 import RecordDetail from './pages/RecordDetail'
+import Profile from './pages/Profile'
 import type { ReactNode } from 'react'
 
 function Protected({ children }: { children: ReactNode }) {
@@ -62,6 +63,14 @@ export default function App() {
         <Route path="analytics" element={<CampaignAnalytics />} />
         <Route path="settings" element={<CampaignSettings />} />
       </Route>
+      <Route
+        path="/profile"
+        element={
+          <Protected>
+            <Profile />
+          </Protected>
+        }
+      />
       <Route
         path="/campaigns/:id/records/:recordId"
         element={

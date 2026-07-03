@@ -24,11 +24,15 @@ func Api() {
 	facades.Route().Prefix("api/v1").Group(func(router route.Router) {
 		router.Post("auth/register", auth.Register)
 		router.Post("auth/login", auth.Login)
+		// Public (token parsed manually): the Auth middleware would reject the
+		// expired token this endpoint exists to exchange.
+		router.Post("auth/refresh", auth.Refresh)
 	})
 
 	// Authenticated endpoints.
 	facades.Route().Prefix("api/v1").Middleware(middleware.Auth()).Group(func(router route.Router) {
 		router.Get("auth/me", auth.Me)
+		router.Put("auth/me", auth.UpdateMe)
 		router.Post("auth/logout", auth.Logout)
 
 		router.Get("users/search", users.Search)

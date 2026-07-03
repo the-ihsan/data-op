@@ -9,6 +9,10 @@ export const NONE = '__none__'
 
 export const PER_PAGE = 50
 
+/** Heartbeat: how often the visible grid page re-fetches records (ms).
+ * React Query pauses the interval while the tab is in the background. */
+export const HEARTBEAT_MS = 15_000
+
 /** Build a per-stage {field_key: value[]} map from a record's stored values. */
 export function valuesForStage(record: RecordRow, stageId: number): CellValues {
   const out: CellValues = {}

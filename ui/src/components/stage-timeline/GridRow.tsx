@@ -40,6 +40,10 @@ export function GridRow({
   const savedValues = useMemo(() => valuesForStage(record, stage.id), [record, stage.id])
   const [local, setLocal] = useState<CellValues>(() => savedValues)
   const [savedSnapshot, setSavedSnapshot] = useState<CellValues>(() => savedValues)
+  // Server values that arrived (via heartbeat refetch) for fields the user is
+  // currently editing; surfaced as a per-field "apply" notice instead of
+  // overwriting their input.
+  const [pendingUpdates, setPendingUpdates] = useState<CellValues>({})
   const [error, setError] = useState<string | null>(null)
   const [justSaved, setJustSaved] = useState(false)
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -51,12 +55,83 @@ export function GridRow({
     setMenuPos({ x: e.clientX, y: e.clientY })
   }
 
-  // Re-sync when the record changes underneath us (e.g. after advance/refetch).
+  const isFieldFocused = (f: StageField) => {
+    const el = fieldRefs.current[f.id]
+    const active = document.activeElement
+    return !!el && !!active && (el === active || el.contains(active))
+  }
+
+  // Reconcile refetched server state (heartbeat or invalidation) without
+  // disturbing the user: fields they haven't touched update silently; fields
+  // with unsaved edits (or the field they're focused in) keep the local value
+  // and get a pending "apply" notice instead. The snapshot only moves once a
+  // field is reconciled, so an untouched-but-focused field never turns dirty
+  // and can't save stale data on blur.
   useEffect(() => {
-    setLocal(savedValues)
-    setSavedSnapshot(savedValues)
-    setJustSaved(false)
+    const nextLocal = { ...local }
+    const nextSnapshot = { ...savedSnapshot }
+    const nextPending = { ...pendingUpdates }
+    let localChanged = false
+    let snapshotChanged = false
+    let pendingChanged = false
+
+    for (const f of fields) {
+      const server = savedValues[f.key] ?? []
+      const snap = savedSnapshot[f.key] ?? []
+      const loc = local[f.key] ?? []
+
+      if (fieldValuesEqual(server, snap)) {
+        // Server hasn't moved since we last reconciled (or reverted back).
+        if (nextPending[f.key]) {
+          delete nextPending[f.key]
+          pendingChanged = true
+        }
+        continue
+      }
+
+      if (fieldValuesEqual(loc, snap) && !isFieldFocused(f)) {
+        // Untouched and not being edited: apply silently.
+        nextLocal[f.key] = server
+        nextSnapshot[f.key] = server
+        localChanged = true
+        snapshotChanged = true
+        if (nextPending[f.key]) {
+          delete nextPending[f.key]
+          pendingChanged = true
+        }
+      } else if (fieldValuesEqual(loc, server)) {
+        // Local edits already match the server value: just reconcile.
+        nextSnapshot[f.key] = server
+        snapshotChanged = true
+        if (nextPending[f.key]) {
+          delete nextPending[f.key]
+          pendingChanged = true
+        }
+      } else {
+        // User has (or is making) a conflicting edit: offer the update.
+        nextPending[f.key] = server
+        pendingChanged = true
+      }
+    }
+
+    if (localChanged) setLocal(nextLocal)
+    if (snapshotChanged) setSavedSnapshot(nextSnapshot)
+    if (pendingChanged) setPendingUpdates(nextPending)
+    // Reconciliation must only re-run when fresh server data arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedValues])
+
+  const applyPendingUpdate = (key: string) => {
+    const server = pendingUpdates[key]
+    if (!server) return
+    setLocal((prev) => ({ ...prev, [key]: server }))
+    setSavedSnapshot((prev) => ({ ...prev, [key]: server }))
+    setPendingUpdates((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
 
   const rowDirty = useMemo(
     () => fields.some((f) => !f.prev_stage_key && !fieldValuesEqual(local[f.key], savedSnapshot[f.key])),
@@ -120,19 +195,37 @@ export function GridRow({
                 {(local[f.key] ?? []).join(', ')}
               </span>
             ) : (
-              <GridCell
-                field={f}
-                value={local[f.key] ?? []}
-                disabled={disabled}
-                saveOnBlur
-                inputRef={(el) => { fieldRefs.current[f.id] = el }}
-                onEnter={() => {
-                  if (isLastEditable) commitRow()
-                  else focusNextEditableField(fields, fieldRefs, fieldIndex)
-                }}
-                onChange={(arr, commit) => setCell(f.key, arr, commit)}
-                onCommit={commitRow}
-              />
+              <>
+                <GridCell
+                  field={f}
+                  value={local[f.key] ?? []}
+                  disabled={disabled}
+                  saveOnBlur
+                  inputRef={(el) => { fieldRefs.current[f.id] = el }}
+                  onEnter={() => {
+                    if (isLastEditable) commitRow()
+                    else focusNextEditableField(fields, fieldRefs, fieldIndex)
+                  }}
+                  onChange={(arr, commit) => setCell(f.key, arr, commit)}
+                  onCommit={commitRow}
+                />
+                {pendingUpdates[f.key] && (
+                  <div className="px-2 pb-0.5 text-[11px] leading-tight text-amber-600 dark:text-amber-500">
+                    This field has new update{' '}
+                    <button
+                      type="button"
+                      className="cursor-pointer font-medium underline underline-offset-2"
+                      title={`Replace with: ${pendingUpdates[f.key].join(', ') || '(empty)'}`}
+                      // Runs before the input's blur commit; keep mouse focus
+                      // from triggering a save of the value we're replacing.
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyPendingUpdate(f.key)}
+                    >
+                      apply
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </TableCell>
         )

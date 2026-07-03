@@ -206,7 +206,10 @@ a unique `email` at Intake).
 
 ## API surface (`/api/v1`, JWT via `Authorization: Bearer <token>`)
 
-auth: `POST register|login`, `GET me`, `POST logout` ·
+auth: `POST register|login`, `POST refresh` (public; exchanges a valid **or expired**
+JWT — within `JWT_REFRESH_TTL` — for a fresh one; parses the token manually since the
+Auth middleware rejects expired ones), `GET me`, `PUT me` (update profile: `name`,
+`email`, optional `current_password`+`new_password` ≥ 6 chars), `POST logout` ·
 users: `GET /users/search?q=` (min 2 chars; matches username/name, max 20) ·
 campaigns: `GET/POST /campaigns`, `GET/PUT/DELETE /campaigns/{campaign}` ·
 members: `GET/POST …/members`, `PUT/DELETE …/members/{member}` ·
@@ -232,7 +235,11 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
 ## Frontend structure (`ui/src/`)
 
 - `api/client.ts` — axios instance (`baseURL /api/v1`), attaches token from
-  localStorage, unwraps `{data}` via `unwrap()`, clears session + redirects on 401.
+ localStorage, unwraps `{data}` via `unwrap()`. On 401 it first tries
+ `POST /auth/refresh` with the (possibly expired) token — one shared in-flight
+ refresh for concurrent 401s — stores the new token and replays the request;
+ only a failed refresh clears the session and redirects to `/login`. Paired with
+ `JWT_TTL=720` (12h) in `api/.env`, this fixes the frequent-logout issue.
 - `api/types.ts` — TS types + `parseOptions`/`parseFieldKeys` helpers.
 - `api/resources.ts` — typed endpoint wrappers grouped by resource.
 - `auth/AuthContext.tsx` — `useAuth()` (user/login/register/logout).
@@ -240,6 +247,9 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
   name/username + log out). Campaign routes are nested under `/campaigns/:id` with
   `CampaignDetail` as layout (`CampaignNav` sub-header + `<Outlet>`). Sub-routes:
   index → Timeline (`StageTimeline`), `stages`, `members`, `analytics`, `settings`.
+ Top-level `/profile` route (`pages/Profile.tsx`, linked from `UserMenu`): update
+ name/email and optionally change password (current + new + confirm) via `PUT
+ /auth/me`; on success updates the cached user through `AuthContext.updateUser`.
   Below **1200px** (`drawer-nav` breakpoint) campaign tab links move into a left
   **Sheet**; desktop shows a horizontal nav row under the campaign header. `pages/`:
   Login, Campaigns, CampaignDetail (layout + route segment components), RecordDetail
@@ -360,6 +370,16 @@ analytics: `GET …/campaigns/{campaign}/analytics`.
  total via `onTotalChange` callback. Stage pills no longer show per-stage counts.
  Pagination footer appears when `totalPages > 1`. `PER_PAGE = 50` lives in
  `stage-timeline/helpers.ts`.
+ - **StageTimeline heartbeat**: the records query polls every `HEARTBEAT_MS` (15s,
+ `stage-timeline/helpers.ts`) via React Query `refetchInterval` (paused in background
+ tabs). The query key is scoped to stage/filters/page so only the visible page is
+ fetched. `GridRow` reconciles refetched values **per field** without disturbing the
+ user: untouched fields update silently; a field with unsaved local edits (or the one
+ currently focused) keeps the user's value and shows an amber "This field has new
+ update <u>apply</u>" notice under the cell — clicking apply adopts the server value
+ (its `onMouseDown` calls `preventDefault()` so the click doesn't blur-save the stale
+ value first). The saved-snapshot only advances for reconciled fields, so a focused
+ untouched field can't blur-save stale data over a newer server value.
 - The old `StageTimeline.tsx` once contained **corrupted bytes** (NUL / control chars
  where `…`, `—`, `“”` and a lock glyph should be), which made ripgrep treat the file as
  binary and silently return no matches. If a grep on a UI file unexpectedly finds

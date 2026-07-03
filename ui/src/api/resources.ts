@@ -21,6 +21,12 @@ export const authApi = {
   login: (body: { username: string; password: string }) =>
     unwrap<{ user: User; token: string }>(api.post('/auth/login', body)),
   me: () => unwrap<User>(api.get('/auth/me')),
+  updateMe: (body: {
+    name: string
+    email: string
+    current_password?: string
+    new_password?: string
+  }) => unwrap<User>(api.put('/auth/me', body)),
 }
 
 // --- Users ---

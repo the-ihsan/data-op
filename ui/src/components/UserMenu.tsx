@@ -1,4 +1,5 @@
-import { ChevronDown, LogOut } from 'lucide-react'
+import { ChevronDown, LogOut, UserRound } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +28,13 @@ export default function UserMenu() {
           <div className="truncate font-medium">{user.name}</div>
           <div className="truncate text-xs text-muted-foreground">@{user.username}</div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/profile">
+            <UserRound />
+            Profile
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={logout}>
           <LogOut />
